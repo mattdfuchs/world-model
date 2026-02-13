@@ -1,0 +1,223 @@
+{
+  "name": "Test Components",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "url": "http://mcp-neo4j:7011/mcp",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.NEO4J_MCP_AUTH_HEADER }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"initialize\",\n  \"params\": {\n    \"protocolVersion\": \"2024-11-05\",\n    \"capabilities\": {},\n    \"clientInfo\": {\n      \"name\": \"n8n-test\",\n      \"version\": \"0.1.0\"\n    }\n  },\n  \"id\": 1\n}",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "id": "neo4j-init",
+      "name": "Neo4j MCP Init",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [260, 0]
+    },
+    {
+      "parameters": {
+        "agent": "toolsAgent",
+        "promptType": "define",
+        "text": "Pick two distinct integers less than 100, add them using Lean, store the result in Neo4j as a Sum node, then query and tell me the total count of Sum nodes.",
+        "options": {
+          "systemMessage": "You are an automated agent with three tools: lean_command, write_cypher, read_cypher.\n\nYour task:\n1. Pick two distinct integers < 100.\n2. Use lean_command to compute their sum (e.g. #eval 42 + 17).\n3. Use write_cypher to store the result: CREATE (s:Sum {a: <first>, b: <second>, sum: <result>}) RETURN s\n4. Use read_cypher to count all Sum nodes: MATCH (s:Sum) RETURN count(s) AS count\n5. Respond with the final count.\n\nAlways use the tools — do not compute the sum yourself.",
+          "maxIterations": 10
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [520, 0]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-5-20250929",
+        "options": {
+          "maxTokensToSample": 1024
+        }
+      },
+      "id": "anthropic-model",
+      "name": "Anthropic Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.2,
+      "position": [420, 220],
+      "credentials": {
+        "anthropicApi": {
+          "id": "1",
+          "name": "Anthropic API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "lean_command",
+        "description": "Run a Lean 4 command. Use #eval <expr> to evaluate expressions.",
+        "method": "POST",
+        "url": "http://python-mcp:7010/lean/command",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ cmd: $fromAI('cmd', 'The Lean command, e.g. #eval 2 + 3', 'string') }) }}"
+      },
+      "id": "lean-command-tool",
+      "name": "Lean Command",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [560, 220]
+    },
+    {
+      "parameters": {
+        "name": "write_cypher",
+        "description": "Execute a write Cypher query against Neo4j.",
+        "method": "POST",
+        "url": "http://mcp-neo4j:7011/mcp",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.NEO4J_MCP_AUTH_HEADER }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ jsonrpc: '2.0', method: 'tools/call', params: { name: 'write-cypher', arguments: { query: $fromAI('query', 'Cypher write query', 'string') } }, id: 20 }) }}"
+      },
+      "id": "write-cypher-tool",
+      "name": "Write Cypher",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [700, 220]
+    },
+    {
+      "parameters": {
+        "name": "read_cypher",
+        "description": "Execute a read-only Cypher query against Neo4j.",
+        "method": "POST",
+        "url": "http://mcp-neo4j:7011/mcp",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.NEO4J_MCP_AUTH_HEADER }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ jsonrpc: '2.0', method: 'tools/call', params: { name: 'read-cypher', arguments: { query: $fromAI('query', 'Cypher read query', 'string') } }, id: 30 }) }}"
+      },
+      "id": "read-cypher-tool",
+      "name": "Read Cypher",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [840, 220]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Neo4j MCP Init",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j MCP Init": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lean Command": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Cypher": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Cypher": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

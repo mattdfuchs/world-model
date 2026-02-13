@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+
+# Lean
+.lean/
+.lake/
+
+# Node / n8n
+node_modules/
+.n8n/
+
+# OS
+.DS_Store

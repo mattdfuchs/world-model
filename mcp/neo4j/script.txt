@@ -1,0 +1,73 @@
+create (n1:Language {})
+create (n2:City {})
+create (n3:Clinic {})
+create (n4:ClinicalTrial {})
+create (n5:Human {})
+create (n6:Patient {})
+create (n7:Administrator {})
+create (n8:Clinician {})
+
+create (n9:English)
+create (n10:Spanish)
+create (n11:French)
+
+create (n12:Valencia)
+create (n13:London)
+create (n14:Nice)
+create (n14_5:Paris)
+
+create (n15:Jose)
+create (n16:Rick)
+create (n17:Allen)
+create (n18:Matthew)
+
+create (n19:ValClinic)
+create (n20:NiceClinic)
+create (n21:ParisClinic)
+create (n22:LondonClinic)
+
+create (n23:OurTrial)
+create (n24:Release)
+
+create (n9)-[:IS_A]->(n1)
+create (n10)-[:IS_A]->(n1)
+create (n11)-[:IS_A]->(n1)
+
+create (n12)-[:IS_A]->(n2)
+create (n13)-[:IS_A]->(n2)
+create (n14)-[:IS_A]->(n2)
+
+create (n15)-[:IS_A]->(n5)
+create (n16)-[:IS_A]->(n5)
+create (n17)-[:IS_A]->(n5)
+create (n18)-[:IS_A]->(n5)
+
+create (n19)-[:IS_A]->(n3)
+create (n20)-[:IS_A]->(n3)
+create (n21)-[:IS_A]->(n3)
+create (n22)-[:IS_A]->(n3)
+
+create (n23)-[:IS_A]->(n4)
+
+create (n15)-[:ROLE]->(n6)
+create (n15)-[:LIVES]->(n12)
+create (n15)-[:SPEAKS]->(n10)
+
+create (n16)-[:ROLE]->(n7)
+create (n16)-[:SPEAKS]->(n9)
+create (n16)-[:ASSIGNED]->(n22)
+
+create (n17)-[:ROLE]->(n8)
+create (n17)-[:SPEAKS]->(n9)
+create (n17)-[:SPEAKS]->(n10)
+create (n17)-[:ASSIGNED]->(n19)
+
+create (n18)-[:ROLE]->(n8)
+create (n18)-[:SPEAKS]->(n9)
+create (n18)-[:SPEAKS]->(n11)
+create (n18)-[:ASSIGNED]->(n20)
+
+create (n19)-[:IS_IN]->(n12)
+create (n20)-[:IS_IN]->(n14)
+create (n21)-[:IS_IN]->(n14_5)
+create (n22)-[:IS_IN]->(n13)
