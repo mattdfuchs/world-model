@@ -3,3 +3,4 @@
 import WorldModel.Basic
 import WorldModel.Logic
 import WorldModel.Examples
+import WorldModel.KB
