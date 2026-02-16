@@ -1,0 +1,442 @@
+{
+  "name": "Test Components",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mcp-neo4j:7011/mcp",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.NEO4J_MCP_AUTH_HEADER }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"initialize\",\n  \"params\": {\n    \"protocolVersion\": \"2024-11-05\",\n    \"capabilities\": {},\n    \"clientInfo\": {\n      \"name\": \"n8n-test\",\n      \"version\": \"0.1.0\"\n    }\n  },\n  \"id\": 1\n}",
+        "options": {}
+      },
+      "id": "neo4j-init",
+      "name": "Neo4j MCP Init",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        272,
+        -208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mcp-neo4j:7011/mcp",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.NEO4J_MCP_AUTH_HEADER }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"name\":\"write-cypher\",\"arguments\":{\"query\":\"MATCH (n) DETACH DELETE n\"}},\"id\":2}",
+        "options": {}
+      },
+      "id": "delete-all-nodes",
+      "name": "Delete All Nodes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        528,
+        -208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst cypher = fs.readFileSync('/home/node/.n8n-files/script.txt', 'utf8').trim();\nconst body = JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:'write-cypher',arguments:{query:cypher}},id:3});\nreturn [{ json: { body: body } }];"
+      },
+      "id": "read-script",
+      "name": "Read Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        -208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mcp-neo4j:7011/mcp",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.NEO4J_MCP_AUTH_HEADER }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "init-db",
+      "name": "Initialize DB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1040,
+        -208
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "chat-trigger",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        208
+      ],
+      "webhookId": "chat-trigger-webhook"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "You are an automated scheduling agent with four tools: lean_command, write-cypher, read-cypher, get-schema. Use get-neo4j-schema to inspect the database structure before querying.\n\nYou may just be asked questions about the database, in which case just answer the question; or you may be asked to arrange a meeting at a Clinic for a Patient with a Clinician. The Clinic must be in the same city the Patient lives in, the Clinician must be assigned to the Clinic, and they must have a language in common.\n\nYou will use Cypher to read information about all the entities. Make sure you read the graph database schema before making any queries.\n\nIf you are asked to schedule a meeting you will respond with JSON. \n\nIf there is no possible meeting, respond with a JSON null.\n\nIf a meeting is possible, return a JSON object. The object should have 3 properties:\n- meeting, which is an object with properties \"clinic\", \"patient\", and \"clinician\" with the correct values\n- facts, which is a list of the facts from the database used to create the meeting. Each element of the list should be an object with the fields \"relation\", \"source\", and \"target\"\n- explanation, which should be properly escaped text explaining why the facts support the proposed meeting.\n \nDo not create the meeting in the database. Respond with where the meeting would, be who the participants are, and why.\n\nDo not read the whole database, only what you need to answer your prompt.",
+          "maxIterations": 10
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1040,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-5-20250929",
+        "options": {
+          "maxTokensToSample": 1024
+        }
+      },
+      "id": "anthropic-model",
+      "name": "Anthropic Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.2,
+      "position": [
+        944,
+        432
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "a58asT6g6X06bWnB",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Run a Lean 4 command. Use #eval expr to evaluate expressions.",
+        "method": "POST",
+        "url": "http://python-mcp:7010/lean/command",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"cmd\": \"{cmd}\"}",
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "cmd",
+              "description": "Lean command to run, e.g. #eval 2 + 3",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "lean-command-tool",
+      "name": "lean_command",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1088,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Execute a write Cypher query against Neo4j.",
+        "method": "POST",
+        "url": "http://mcp-neo4j:7011/mcp",
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "Authorization",
+              "valueProvider": "fieldValue",
+              "value": "={{ $env.NEO4J_MCP_AUTH_HEADER }}"
+            },
+            {
+              "name": "Content-Type",
+              "valueProvider": "fieldValue",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"name\":\"write-cypher\",\"arguments\":{\"query\":\"{query}\"}},\"id\":20}",
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "query",
+              "description": "Cypher write query",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "write-cypher-tool",
+      "name": "write_cypher",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1232,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Execute a read-only Cypher query against Neo4j.",
+        "method": "POST",
+        "url": "http://mcp-neo4j:7011/mcp",
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "Authorization",
+              "valueProvider": "fieldValue",
+              "value": "={{ $env.NEO4J_MCP_AUTH_HEADER }}"
+            },
+            {
+              "name": "Content-Type",
+              "valueProvider": "fieldValue",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"name\":\"read-cypher\",\"arguments\":{\"query\":\"{query}\"}},\"id\":30}",
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "query",
+              "description": "Cypher read query",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "read-cypher-tool",
+      "name": "read_cypher",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1360,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Get the schema of the Neo4j database, including node labels, relationship types, and property keys.",
+        "method": "POST",
+        "url": "http://mcp-neo4j:7011/mcp",
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "Authorization",
+              "valueProvider": "fieldValue",
+              "value": "={{ $env.NEO4J_MCP_AUTH_HEADER }}"
+            },
+            {
+              "name": "Content-Type",
+              "valueProvider": "fieldValue",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"name\":\"get-schema\",\"arguments\":{}},\"id\":40}"
+      },
+      "id": "get-schema-tool",
+      "name": "get_neo4j_schema",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1504,
+        432
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Neo4j MCP Init",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j MCP Init": {
+      "main": [
+        [
+          {
+            "node": "Delete All Nodes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete All Nodes": {
+      "main": [
+        [
+          {
+            "node": "Read Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Script": {
+      "main": [
+        [
+          {
+            "node": "Initialize DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "lean_command": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "write_cypher": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "read_cypher": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_neo4j_schema": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "469b472b-e68c-49a3-87be-833d3e6c4e67",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "41c87bf6cd95c0341bdab57dc4b8d3239124180cede813719c7bfd57bd8476ad"
+  },
+  "id": "jbBxl34OeEKGjh9L8fpTI",
+  "tags": []
+}

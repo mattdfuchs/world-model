@@ -45,3 +45,6 @@ def clinicianCanServe (clinician patient : Human) : Prop :=
 /-- A clinic is in the same city where a patient lives. -/
 def clinicInPatientCity (c : Clinic) (p : Human) : Prop :=
   ∃ city : City, isIn c city ∧ lives p city
+
+def legalMeeting (c : Clinic) (patient : Human) (clinician : Human) : Prop :=
+  clinicInPatientCity c patient ∧ clinicianCanServe clinician patient ∧ assigned clinician c

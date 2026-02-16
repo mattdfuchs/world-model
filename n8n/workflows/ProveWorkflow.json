@@ -1,5 +1,11 @@
 {
+  "updatedAt": "2026-02-16T11:51:37.947Z",
+  "createdAt": "2026-02-16T11:51:37.947Z",
+  "id": "testLeanMultiAgent01",
   "name": "Test Lean",
+  "description": null,
+  "active": false,
+  "isArchived": false,
   "nodes": [
     {
       "parameters": {},
@@ -7,7 +13,10 @@
       "name": "Manual Trigger",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [0, -200]
+      "position": [
+        0,
+        -200
+      ]
     },
     {
       "parameters": {
@@ -35,7 +44,10 @@
       "name": "Neo4j MCP Init",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [272, -200]
+      "position": [
+        272,
+        -200
+      ]
     },
     {
       "parameters": {
@@ -63,7 +75,10 @@
       "name": "Delete All Nodes",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [528, -200]
+      "position": [
+        528,
+        -200
+      ]
     },
     {
       "parameters": {
@@ -73,7 +88,10 @@
       "name": "Read Script",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [784, -200]
+      "position": [
+        784,
+        -200
+      ]
     },
     {
       "parameters": {
@@ -101,7 +119,10 @@
       "name": "Initialize DB",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1040, -200]
+      "position": [
+        1040,
+        -200
+      ]
     },
     {
       "parameters": {
@@ -118,7 +139,10 @@
       "name": "Warm Up Lean",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [1296, -200]
+      "position": [
+        1296,
+        -200
+      ]
     },
     {
       "parameters": {},
@@ -126,13 +150,16 @@
       "name": "Chat Trigger",
       "type": "@n8n/n8n-nodes-langchain.chatTrigger",
       "typeVersion": 1.1,
-      "position": [0, 300],
+      "position": [
+        0,
+        300
+      ],
       "webhookId": "chat-trigger-webhook"
     },
     {
       "parameters": {
         "options": {
-          "systemMessage": "You are a request classifier. Analyze the user's input and determine if it is:\n1. A \"query\" — asking for information about the database (counts, lists, lookups, etc.)\n2. A \"meeting\" — requesting to arrange or schedule a meeting for a patient\n\nRespond with ONLY a JSON object, no other text:\n{\"type\": \"query\", \"prompt\": \"<original user input>\"}\nor\n{\"type\": \"meeting\", \"prompt\": \"<original user input>\"}",
+          "systemMessage": "You are a request classifier. Analyze the user's input and determine if it is:\n1. A \"query\" \u2014 asking for information about the database (counts, lists, lookups, etc.)\n2. A \"meeting\" \u2014 requesting to arrange or schedule a meeting for a patient\n\nRespond with ONLY a JSON object, no other text:\n{\"type\": \"query\", \"prompt\": \"<original user input>\"}\nor\n{\"type\": \"meeting\", \"prompt\": \"<original user input>\"}",
           "maxIterations": 3
         }
       },
@@ -140,7 +167,10 @@
       "name": "Router Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
-      "position": [300, 300]
+      "position": [
+        300,
+        300
+      ]
     },
     {
       "parameters": {
@@ -150,7 +180,10 @@
       "name": "Parse Route",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [560, 300]
+      "position": [
+        560,
+        300
+      ]
     },
     {
       "parameters": {
@@ -179,14 +212,17 @@
       "name": "IF Is Meeting",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [800, 300]
+      "position": [
+        800,
+        300
+      ]
     },
     {
       "parameters": {
         "promptType": "define",
         "text": "={{ $json.prompt }}",
         "options": {
-          "systemMessage": "You are an automated scheduling agent. Your task is to arrange a meeting at a Clinic for a Patient with a Clinician. The Clinic must be in the same city the Patient lives in, the Clinician must be assigned to the Clinic, and they must have a language in common.\n\nUse get_neo4j_schema to inspect the database structure, then use read_cypher to find relevant data. Do not read the whole database — only what you need.\n\nIf there is no possible meeting, respond with ONLY: null\n\nIf a meeting is possible, respond with ONLY a JSON object (no other text):\n{\n  \"meeting\": {\"clinic\": \"<name>\", \"patient\": \"<name>\", \"clinician\": \"<name>\"},\n  \"facts\": [\n    {\"relation\": \"<predicate>\", \"source\": \"<entity>\", \"target\": \"<entity>\"},\n    ...\n  ],\n  \"explanation\": \"<why the facts support this meeting>\"\n}\n\nThe \"relation\" field must use the Lean4 predicate names: hasRole, speaks, lives, assigned, isIn.\nThe \"source\" and \"target\" must use the exact Lean4 constructor names (e.g., \"Jose\", \"ValClinic\", \"Spanish\", \"Valencia\", \"Clinician\", \"Patient\").\n\nDo not create the meeting in the database.",
+          "systemMessage": "You are an automated scheduling agent. Your task is to arrange a meeting at a Clinic for a Patient with a Clinician. The Clinic must be in the same city the Patient lives in, the Clinician must be assigned to the Clinic, and they must have a language in common.\n\nUse get_neo4j_schema to inspect the database structure, then use read_cypher to find relevant data. Do not read the whole database \u2014 only what you need.\n\nIf there is no possible meeting, respond with ONLY: null\n\nIf a meeting is possible, respond with ONLY a JSON object (no other text):\n{\n  \"meeting\": {\"clinic\": \"<name>\", \"patient\": \"<name>\", \"clinician\": \"<name>\"},\n  \"facts\": [\n    {\"relation\": \"<predicate>\", \"source\": \"<entity>\", \"target\": \"<entity>\"},\n    ...\n  ],\n  \"explanation\": \"<why the facts support this meeting>\"\n}\n\nThe \"relation\" field must use the Lean4 predicate names: hasRole, speaks, lives, assigned, isIn.\nThe \"source\" and \"target\" must use the exact Lean4 constructor names (e.g., \"Jose\", \"ValClinic\", \"Spanish\", \"Valencia\", \"Clinician\", \"Patient\").\n\nDo not create the meeting in the database.",
           "maxIterations": 10
         }
       },
@@ -194,7 +230,10 @@
       "name": "Meeting Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
-      "position": [1080, 160]
+      "position": [
+        1080,
+        160
+      ]
     },
     {
       "parameters": {
@@ -204,7 +243,10 @@
       "name": "Extract Meeting JSON",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1360, 160]
+      "position": [
+        1360,
+        160
+      ]
     },
     {
       "parameters": {
@@ -233,14 +275,17 @@
       "name": "IF Meeting Valid",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1600, 160]
+      "position": [
+        1600,
+        160
+      ]
     },
     {
       "parameters": {
         "promptType": "define",
         "text": "={{ $input.first().json.proofPrompt }}",
         "options": {
-          "systemMessage": "You are a Lean 4 proof agent. You receive a meeting specification in JSON and must construct a formal proof that the meeting is legal according to the WorldModel knowledge base.\n\n## Knowledge Base (WorldModel.KB.Relations)\n\nTypes:\n- Human: Jose | Rick | Allen | Matthew\n- Clinic: ValClinic | NiceClinic | ParisClinic | LondonClinic\n- City: Valencia | London | Nice | Paris\n- Language: English | Spanish | French\n- Role: Patient | Administrator | Clinician\n\nPredicate constructors:\n- hasRole: jose_patient, rick_admin, allen_clinician, matthew_clinician\n- speaks: jose_spanish, rick_english, allen_english, allen_spanish, matthew_english, matthew_french\n- lives: jose_valencia\n- assigned: rick_london, allen_val, matthew_nice\n- isIn: valClinic_valencia, niceClinic_nice, parisClinic_paris, londonClinic_london\n\n## Target: prove legalMeeting\n\nlegalMeeting(clinic, patient, clinician) requires:\n1. clinicInPatientCity: ∃ city, isIn clinic city ∧ lives patient city\n2. clinicianCanServe: hasRole clinician .Clinician ∧ hasRole patient .Patient ∧ ∃ lang, speaks clinician lang ∧ speaks patient lang\n3. assigned clinician clinic\n\n## Proof template\n\nimport WorldModel.KB.Relations\n\ntheorem meeting_legal : legalMeeting .<Clinic> .<Patient> .<Clinician> :=\n  ⟨⟨.<City>, isIn.<clinic_city>, lives.<patient_city>⟩,\n   ⟨hasRole.<clinician_role>, hasRole.<patient_role>, .<Language>, speaks.<clinician_lang>, speaks.<patient_lang>⟩,\n   assigned.<clinician_clinic>⟩\n\n## Example\n\nFor ValClinic, Jose, Allen:\n\nimport WorldModel.KB.Relations\n\ntheorem meeting_legal : legalMeeting .ValClinic .Jose .Allen :=\n  ⟨⟨.Valencia, isIn.valClinic_valencia, lives.jose_valencia⟩,\n   ⟨hasRole.allen_clinician, hasRole.jose_patient, .Spanish, speaks.allen_spanish, speaks.jose_spanish⟩,\n   assigned.allen_val⟩\n\n## Interpreting lean_command responses\n\nThe tool returns JSON with:\n- \"ok\": true means the code was accepted by Lean\n- \"messages\" with \"severity\": \"info\" are NORMAL informational output, NOT errors\n- \"messages\" with \"severity\": \"error\" are actual errors that need fixing\n- \"sorries\": [] (empty array) means no incomplete proofs — this is GOOD\n- An empty \"messages\" array or only \"info\" messages means SUCCESS\n\nA successful proof looks like: {\"ok\": true, \"result\": {\"messages\": [], \"sorries\": []}}\nThis means the proof compiled and is COMPLETE. Stop immediately and output the code.\n\n## Instructions\n\n1. Read the meeting JSON from the input\n2. Map entity names to Lean4 constructors using the predicate constructors listed above\n3. Construct the proof term following the template\n4. Use the lean_command tool to verify: send the COMPLETE code (with import WorldModel.KB.Relations)\n5. If the response has \"ok\": true and no \"error\" severity messages, the proof is VERIFIED — stop and output the result\n6. If there are errors, fix and retry\n7. When the proof compiles, output ONLY the complete Lean4 code in a ```lean code block",
+          "systemMessage": "You are a Lean 4 proof agent. You receive a meeting specification in JSON and must construct a formal proof that the meeting is legal according to the WorldModel knowledge base.\n\n## Knowledge Base (WorldModel.KB.Relations)\n\nTypes:\n- Human: Jose | Rick | Allen | Matthew\n- Clinic: ValClinic | NiceClinic | ParisClinic | LondonClinic\n- City: Valencia | London | Nice | Paris\n- Language: English | Spanish | French\n- Role: Patient | Administrator | Clinician\n\nPredicate constructors:\n- hasRole: jose_patient, rick_admin, allen_clinician, matthew_clinician\n- speaks: jose_spanish, rick_english, allen_english, allen_spanish, matthew_english, matthew_french\n- lives: jose_valencia\n- assigned: rick_london, allen_val, matthew_nice\n- isIn: valClinic_valencia, niceClinic_nice, parisClinic_paris, londonClinic_london\n\n## Target: prove legalMeeting\n\nlegalMeeting(clinic, patient, clinician) requires:\n1. clinicInPatientCity: \u2203 city, isIn clinic city \u2227 lives patient city\n2. clinicianCanServe: hasRole clinician .Clinician \u2227 hasRole patient .Patient \u2227 \u2203 lang, speaks clinician lang \u2227 speaks patient lang\n3. assigned clinician clinic\n\n## Proof template\n\nimport WorldModel.KB.Relations\n\ntheorem meeting_legal : legalMeeting .<Clinic> .<Patient> .<Clinician> :=\n  \u27e8\u27e8.<City>, isIn.<clinic_city>, lives.<patient_city>\u27e9,\n   \u27e8hasRole.<clinician_role>, hasRole.<patient_role>, .<Language>, speaks.<clinician_lang>, speaks.<patient_lang>\u27e9,\n   assigned.<clinician_clinic>\u27e9\n\n## Example\n\nFor ValClinic, Jose, Allen:\n\nimport WorldModel.KB.Relations\n\ntheorem meeting_legal : legalMeeting .ValClinic .Jose .Allen :=\n  \u27e8\u27e8.Valencia, isIn.valClinic_valencia, lives.jose_valencia\u27e9,\n   \u27e8hasRole.allen_clinician, hasRole.jose_patient, .Spanish, speaks.allen_spanish, speaks.jose_spanish\u27e9,\n   assigned.allen_val\u27e9\n\n## Interpreting lean_command responses\n\nThe tool returns JSON with:\n- \"ok\": true means the code was accepted by Lean\n- \"messages\" with \"severity\": \"info\" are NORMAL informational output, NOT errors\n- \"messages\" with \"severity\": \"error\" are actual errors that need fixing\n- \"sorries\": [] (empty array) means no incomplete proofs \u2014 this is GOOD\n- An empty \"messages\" array or only \"info\" messages means SUCCESS\n\nA successful proof looks like: {\"ok\": true, \"result\": {\"messages\": [], \"sorries\": []}}\nThis means the proof compiled and is COMPLETE. Stop immediately and output the code.\n\n## Instructions\n\n1. Read the meeting JSON from the input\n2. Map entity names to Lean4 constructors using the predicate constructors listed above\n3. Construct the proof term following the template\n4. Use the lean_command tool to verify: send the COMPLETE code (with import WorldModel.KB.Relations)\n5. If the response has \"ok\": true and no \"error\" severity messages, the proof is VERIFIED \u2014 stop and output the result\n6. If there are errors, fix and retry\n7. When the proof compiles, output ONLY the complete Lean4 code in a ```lean code block",
           "maxIterations": 10
         }
       },
@@ -248,7 +293,10 @@
       "name": "Proof Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
-      "position": [1880, 20]
+      "position": [
+        1880,
+        20
+      ]
     },
     {
       "parameters": {
@@ -258,7 +306,10 @@
       "name": "Extract Proof",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2160, 20]
+      "position": [
+        2160,
+        20
+      ]
     },
     {
       "parameters": {
@@ -268,7 +319,10 @@
       "name": "Verify Proof",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2400, 20]
+      "position": [
+        2400,
+        20
+      ]
     },
     {
       "parameters": {
@@ -278,7 +332,10 @@
       "name": "Check Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2640, 20]
+      "position": [
+        2640,
+        20
+      ]
     },
     {
       "parameters": {
@@ -288,7 +345,10 @@
       "name": "No Meeting Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1880, 300]
+      "position": [
+        1880,
+        300
+      ]
     },
     {
       "parameters": {
@@ -303,7 +363,10 @@
       "name": "Query Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
-      "position": [1080, 500]
+      "position": [
+        1080,
+        500
+      ]
     },
     {
       "parameters": {
@@ -316,7 +379,10 @@
       "name": "Router LLM",
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.2,
-      "position": [220, 520],
+      "position": [
+        220,
+        520
+      ],
       "credentials": {
         "anthropicApi": {
           "id": "a58asT6g6X06bWnB",
@@ -335,7 +401,10 @@
       "name": "Meeting LLM",
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.2,
-      "position": [980, 400],
+      "position": [
+        980,
+        400
+      ],
       "credentials": {
         "anthropicApi": {
           "id": "a58asT6g6X06bWnB",
@@ -380,7 +449,10 @@
       "name": "meeting_read_cypher",
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
-      "position": [1120, 400]
+      "position": [
+        1120,
+        400
+      ]
     },
     {
       "parameters": {
@@ -410,7 +482,10 @@
       "name": "meeting_get_schema",
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
-      "position": [1260, 400]
+      "position": [
+        1260,
+        400
+      ]
     },
     {
       "parameters": {
@@ -423,7 +498,10 @@
       "name": "Query LLM",
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.2,
-      "position": [980, 720],
+      "position": [
+        980,
+        720
+      ],
       "credentials": {
         "anthropicApi": {
           "id": "a58asT6g6X06bWnB",
@@ -468,7 +546,10 @@
       "name": "query_read_cypher",
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
-      "position": [1120, 720]
+      "position": [
+        1120,
+        720
+      ]
     },
     {
       "parameters": {
@@ -498,7 +579,10 @@
       "name": "query_get_schema",
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
-      "position": [1260, 720]
+      "position": [
+        1260,
+        720
+      ]
     },
     {
       "parameters": {
@@ -511,7 +595,10 @@
       "name": "Proof LLM",
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.2,
-      "position": [1780, 260],
+      "position": [
+        1780,
+        260
+      ],
       "credentials": {
         "anthropicApi": {
           "id": "a58asT6g6X06bWnB",
@@ -542,7 +629,10 @@
       "name": "proof_lean_command",
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
-      "position": [1920, 260]
+      "position": [
+        1920,
+        260
+      ]
     }
   ],
   "connections": {
@@ -825,10 +915,34 @@
       ]
     }
   },
-  "active": false,
   "settings": {
     "executionOrder": "v1"
   },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
   "versionId": "b2c3d4e5-0002-4000-9000-000000000002",
-  "id": "testLeanMultiAgent01"
+  "activeVersionId": null,
+  "versionCounter": 6,
+  "triggerCount": 0,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-02-16T11:51:37.949Z",
+      "createdAt": "2026-02-16T11:51:37.949Z",
+      "role": "workflow:owner",
+      "workflowId": "testLeanMultiAgent01",
+      "projectId": "2cqMQojVPN75JkWY",
+      "project": {
+        "updatedAt": "2026-02-11T17:09:13.264Z",
+        "createdAt": "2026-02-11T17:04:37.196Z",
+        "id": "2cqMQojVPN75JkWY",
+        "name": "Matthew Fuchs <mattdfuchs@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "fac6b457-8dd2-4e95-8f65-c43abb581cd3"
+      }
+    }
+  ]
 }

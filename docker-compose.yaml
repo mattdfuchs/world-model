@@ -3,6 +3,7 @@ services:
     image: neo4j:5-community
     environment:
       NEO4J_AUTH: "${NEO4J_USER}/${NEO4J_PASSWORD}"
+      NEO4J_PLUGINS: '["apoc"]'
       NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
       NEO4J_dbms_security_procedures_allowlist: "apoc.*"
     ports:
@@ -51,8 +52,11 @@ services:
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       NODE_FUNCTION_ALLOW_EXTERNAL: "axios"
+      NODE_FUNCTION_ALLOW_BUILTIN: "fs"
     volumes:
       - n8n_data:/home/node/.n8n
+      - ./mcp/neo4j/script.txt:/home/node/.n8n-files/script.txt:ro
+      - ./n8n/workflows/test-components.json:/home/node/.n8n-files/test-components.json:ro
     depends_on:
       - mcp-neo4j
       - python-mcp

@@ -106,7 +106,33 @@ def lean_build(request: LeanBuildRequest) -> dict:
 @app.post("/lean/command")
 def lean_command(request: LeanCommandRequest) -> dict:
     try:
-        result = lean_client.run_command(request.cmd, env=request.env)
+        cmd = request.cmd
+        env = request.env
+
+        # Split import lines from the rest so the REPL processes them
+        # as separate commands with chained environments.
+        lines = cmd.split("\n")
+        import_lines: list[str] = []
+        rest_lines: list[str] = []
+        past_imports = False
+        for line in lines:
+            if not past_imports and (line.startswith("import ") or line.strip() == ""):
+                import_lines.append(line)
+            else:
+                past_imports = True
+                rest_lines.append(line)
+
+        import_cmd = "\n".join(import_lines).strip()
+        rest_cmd = "\n".join(rest_lines).strip()
+
+        if import_cmd and rest_cmd:
+            # Run import first to set up the environment
+            import_result = lean_client.run_command(import_cmd, env=env)
+            env = import_result.get("env", env)
+            # Run the rest in that environment
+            result = lean_client.run_command(rest_cmd, env=env)
+        else:
+            result = lean_client.run_command(cmd, env=env)
     except (RuntimeError, ValueError) as exc:
         return {"ok": False, "error": str(exc)}
     return {"ok": True, "result": result}
