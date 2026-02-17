@@ -4,7 +4,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Form
 from pydantic import BaseModel
 
 from .lean_client import LeanClient
@@ -136,6 +136,12 @@ def lean_command(request: LeanCommandRequest) -> dict:
     except (RuntimeError, ValueError) as exc:
         return {"ok": False, "error": str(exc)}
     return {"ok": True, "result": result}
+
+
+@app.post("/lean/command/form")
+def lean_command_form(cmd: str = Form(...), env: int | None = Form(None)) -> dict:
+    """Same as /lean/command but accepts form data (for n8n tool compatibility)."""
+    return lean_command(LeanCommandRequest(cmd=cmd, env=env))
 
 
 @app.post("/lean/file")

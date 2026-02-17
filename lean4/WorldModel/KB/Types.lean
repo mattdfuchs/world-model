@@ -1,38 +1,24 @@
 /-
   WorldModel.KB.Types
   Entity types from the clinical-trial knowledge base (mcp/neo4j/script.txt).
+  Each type wraps a String label. Any string can inhabit the type;
+  the relations constrain which labels carry meaning.
 -/
 
-inductive Language where
-  | English
-  | Spanish
-  | French
-  deriving DecidableEq, Repr
+inductive Language : String → Type where
+  | mk : (s : String) → Language s
 
-inductive City where
-  | Valencia
-  | London
-  | Nice
-  | Paris   -- implied by ParisClinic IS_IN Paris
-  deriving DecidableEq, Repr
+inductive City : String → Type where
+  | mk : (s : String) → City s
 
-inductive Clinic where
-  | ValClinic
-  | NiceClinic
-  | ParisClinic
-  | LondonClinic
-  deriving DecidableEq, Repr
+inductive Clinic : String → Type where
+  | mk : (s : String) → Clinic s
 
-inductive ClinicalTrial where
-  | OurTrial
-  deriving DecidableEq, Repr
+inductive ClinicalTrial : String → Type where
+  | mk : (s : String) → ClinicalTrial s
 
-inductive Human where
-  | Jose
-  | Rick
-  | Allen
-  | Matthew
-  deriving DecidableEq, Repr
+inductive Human : String → Type where
+  | mk : (s : String) → Human s
 
 inductive Role where
   | Patient

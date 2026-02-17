@@ -38,6 +38,7 @@ services:
       - "${PY_MCP_PORT}:7010"
     volumes:
       - ./lean4:/app/lean4
+      - elan_cache:/root/.elan
 
   n8n:
     build:
@@ -65,3 +66,4 @@ volumes:
   neo4j_data:
   neo4j_logs:
   n8n_data:
+  elan_cache:

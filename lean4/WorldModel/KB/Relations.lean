@@ -1,50 +1,37 @@
 /-
   WorldModel.KB.Relations
-  Ground facts (as inductive predicates) and derived concepts.
+  Relation type definitions and derived concepts.
 -/
 import WorldModel.KB.Types
 
--- Each constructor is one ground edge from the Cypher script.
+inductive hasRole {h : String} (a : Human h) (r : Role) : Type where
+  | mk : hasRole a r
 
-inductive hasRole : Human → Role → Prop where
-  | jose_patient    : hasRole .Jose    .Patient
-  | rick_admin      : hasRole .Rick    .Administrator
-  | allen_clinician : hasRole .Allen   .Clinician
-  | matthew_clinician : hasRole .Matthew .Clinician
+inductive speaks {h l : String} (a : Human h) (b : Language l) : Type where
+  | mk : speaks a b
 
-inductive speaks : Human → Language → Prop where
-  | jose_spanish    : speaks .Jose    .Spanish
-  | rick_english    : speaks .Rick    .English
-  | allen_english   : speaks .Allen   .English
-  | allen_spanish   : speaks .Allen   .Spanish
-  | matthew_english : speaks .Matthew .English
-  | matthew_french  : speaks .Matthew .French
+inductive lives {h c : String} (a : Human h) (b : City c) : Type where
+  | mk : lives a b
 
-inductive lives : Human → City → Prop where
-  | jose_valencia : lives .Jose .Valencia
+inductive assigned {h c : String} (a : Human h) (b : Clinic c) : Type where
+  | mk : assigned a b
 
-inductive assigned : Human → Clinic → Prop where
-  | rick_london   : assigned .Rick    .LondonClinic
-  | allen_val     : assigned .Allen   .ValClinic
-  | matthew_nice  : assigned .Matthew .NiceClinic
-
-inductive isIn : Clinic → City → Prop where
-  | valClinic_valencia    : isIn .ValClinic    .Valencia
-  | niceClinic_nice       : isIn .NiceClinic   .Nice
-  | parisClinic_paris     : isIn .ParisClinic  .Paris
-  | londonClinic_london   : isIn .LondonClinic .London
+inductive isIn {c t : String} (a : Clinic c) (b : City t) : Type where
+  | mk : isIn a b
 
 /-- Two humans can communicate if they share at least one language. -/
-def canCommunicate (h1 h2 : Human) : Prop :=
-  ∃ l : Language, speaks h1 l ∧ speaks h2 l
+def canCommunicate {h1 h2 : String} (p1 : Human h1) (p2 : Human h2) : Prop :=
+  ∃ (l : String) (lang : Language l), Nonempty (speaks p1 lang) ∧ Nonempty (speaks p2 lang)
 
 /-- A clinician can serve a patient if they can communicate. -/
-def clinicianCanServe (clinician patient : Human) : Prop :=
-  hasRole clinician .Clinician ∧ hasRole patient .Patient ∧ canCommunicate clinician patient
+def clinicianCanServe {h1 h2 : String} (clinician : Human h1) (patient : Human h2) : Prop :=
+  Nonempty (hasRole clinician .Clinician) ∧ Nonempty (hasRole patient .Patient) ∧
+  canCommunicate clinician patient
 
 /-- A clinic is in the same city where a patient lives. -/
-def clinicInPatientCity (c : Clinic) (p : Human) : Prop :=
-  ∃ city : City, isIn c city ∧ lives p city
+def clinicInPatientCity {c p : String} (clinic : Clinic c) (patient : Human p) : Prop :=
+  ∃ (t : String) (city : City t), Nonempty (isIn clinic city) ∧ Nonempty (lives patient city)
 
-def legalMeeting (c : Clinic) (patient : Human) (clinician : Human) : Prop :=
-  clinicInPatientCity c patient ∧ clinicianCanServe clinician patient ∧ assigned clinician c
+def legalMeeting {c p cl : String} (clinic : Clinic c) (patient : Human p) (clinician : Human cl) : Prop :=
+  clinicInPatientCity clinic patient ∧ clinicianCanServe clinician patient ∧
+  Nonempty (assigned clinician clinic)
