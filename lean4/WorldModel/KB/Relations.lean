@@ -35,3 +35,14 @@ def clinicInPatientCity {c p : String} (clinic : Clinic c) (patient : Human p) :
 def legalMeeting {c p cl : String} (clinic : Clinic c) (patient : Human p) (clinician : Human cl) : Prop :=
   clinicInPatientCity clinic patient ∧ clinicianCanServe clinician patient ∧
   Nonempty (assigned clinician clinic)
+
+/-- A LegalMeeting bundles a clinic, patient, and clinician together with
+    proofs that all the conditions for a legal meeting hold. -/
+structure LegalMeeting where
+  {c p cl : String}
+  clinic    : Clinic c
+  patient   : Human p
+  clinician : Human cl
+  inCity    : clinicInPatientCity clinic patient
+  canServe  : clinicianCanServe clinician patient
+  isAssigned : assigned clinician clinic
