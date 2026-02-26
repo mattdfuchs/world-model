@@ -17,7 +17,7 @@
   On mismatch, reports a compile-time error with the position and expected/got types.
 -/
 import Lean
-import WorldModel.KB.Boxes
+import WorldModel.KB.Boxes.Core
 
 open Lean Meta Elab Term
 

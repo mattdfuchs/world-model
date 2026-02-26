@@ -107,6 +107,18 @@ private def getCtorExplicitTypes (ctorInfo : ConstantInfo) (expectedRetType : Ex
   return some (ctorInfo.name.getString!, typeExprs)
 
 /--
+  Recursively split a product type `A × B × ...` into its leaf component types.
+  `×` is right-associative, so `A × B × C = A × (B × C)` → `[A, B, C]`.
+  Non-product types are returned as a singleton list.
+  Used to flatten constructor inputs so `Patient × Clinician` becomes two
+  separate Box inputs rather than one opaque product input.
+-/
+private def flattenProd (e : Expr) : List Expr :=
+  match e with
+  | .app (.app (.const `Prod _) a) b => flattenProd a ++ flattenProd b
+  | other => [other]
+
+/--
   Convert a type `Expr` to a Lean source expression (as a `String`) that,
   when elaborated, evaluates to the type's string key at runtime.
 
@@ -212,10 +224,13 @@ private def buildToBoxCmd (indVal : InductiveVal) : MetaM String := do
           explicitTypes := explicitTypes.push ldecl.type
       -- We require exactly 2 explicit params: input and output
       if explicitTypes.size != 2 then return empty
-      -- First explicit param's type → the input type.
-      -- exprToStr produces a Lean expression that evaluates to the type's
-      -- string name at runtime, with any type params interpolated.
-      let inputRStr ← exprToStr explicitTypes[0]! paramFVars
+      -- First explicit param's type → the input type(s).
+      -- Flatten product types so `Patient × Clinician` becomes two separate
+      -- inputs rather than one opaque product, enabling correct subset checks
+      -- in mightSubstitute.
+      let inputExprs := flattenProd explicitTypes[0]!
+      let inputRStrs ← inputExprs.mapM (exprToStr · paramFVars)
+      let inputsStr := ", ".intercalate inputRStrs
       -- Second explicit param's type → the output type (must be an inductive)
       -- e.g. HeartRate nameVar
       let outputType := explicitTypes[1]!
@@ -233,13 +248,16 @@ private def buildToBoxCmd (indVal : InductiveVal) : MetaM String := do
       for ctor in outputIndVal.ctors do
         let some ci := env.find? ctor | continue
         if let some (branchName, typeExprs) ← getCtorExplicitTypes ci outputType then
-          let typeRStrs ← typeExprs.mapM (exprToStr · paramFVars)
-          let typesStr := ", ".intercalate typeRStrs.toList
+          -- Flatten product types in branch params for the same reason as inputs:
+          -- `String × Patient pn` becomes ["String", "Patient(foo)"] not one opaque string.
+          let flatTypeExprs := typeExprs.toList.flatMap flattenProd
+          let typeRStrs ← flatTypeExprs.mapM (exprToStr · paramFVars)
+          let typesStr := ", ".intercalate typeRStrs
           branchStrs := branchStrs.push s!"(\"{branchName}\", [{typesStr}])"
       let branchesStr := ", ".intercalate branchStrs.toList
       -- Assemble the final instance body.
       -- The \{ and } produce literal braces (escaped from string interpolation).
-      return header ++ s!"toBox := \{ inputs := [{inputRStr}], outputs := [{branchesStr}] }"
+      return header ++ s!"toBox := \{ inputs := [{inputsStr}], outputs := [{branchesStr}] }"
 
 /--
   Entry point called by Lean's deriving machinery.

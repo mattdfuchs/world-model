@@ -77,3 +77,4 @@ def mightSubstitute (α β : Type) [instA : ToBox α] [instB : ToBox β] : Prop 
 
 instance {α β : Type} [instA : ToBox α] [instB : ToBox β] : Decidable (mightSubstitute α β) :=
   decEq (mightSubstituteBool instA.toBox instB.toBox) true
+
