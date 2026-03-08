@@ -19,6 +19,7 @@
   and is deferred to the nesting work.
 -/
 import WorldModel.KB.Arrow.Arrow
+import WorldModel.KB.Arrow.SheetDiagram
 import WorldModel.KB.Boxes           -- Patient, HeartRate, BloodPressure, VO2Max, etc.
 import WorldModel.KB.Relations       -- LegalMeasurementMeeting
 import WorldModel.KB.Facts           -- joseMeetingAllen
@@ -176,3 +177,145 @@ def heartArrow' : Arrow afterConsent (afterConsent ++ [HeartRate "Jose"]) :=
     (.bind (Patient.mk "Jose") .here
       (.bind joseMeetingAllen (.there .here)
         .nil))
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- Consent branching via SheetDiagram
+-- ══════════════════════════════════════════════════════════════════════════════
+
+-- ── Branch-specific consent types ──────────────────────────────────────────
+
+/-- Consent was obtained — carries the patient and the consent note. -/
+inductive ConsentGiven (name : String) : Type where
+  | mk : Patient name → String → ConsentGiven name
+
+/-- Consent was refused — carries the patient and the refusal reason. -/
+inductive ConsentRefused (name : String) : Type where
+  | mk : Patient name → String → ConsentRefused name
+
+-- ── Consent branch arrows ──────────────────────────────────────────────────
+
+/-- Arrow for the consent-given branch: Patient + Meeting → ConsentGiven. -/
+def consentGivenArrow : Arrow joseCtx (joseCtx ++ [ConsentGiven "Jose"]) :=
+  .step
+    { inputs := Tel.ofList [Patient "Jose"]
+      consumes := []
+      produces := [ConsentGiven "Jose"] }
+    joseCtx
+    (.bind (Patient.mk "Jose") .here .nil)
+
+/-- Arrow for the consent-refused branch: Patient → ConsentRefused.
+    Input context is just [Patient "Jose"] (no meeting needed for refusal). -/
+def refusalArrow : Arrow [Patient "Jose"] ([Patient "Jose"] ++ [ConsentRefused "Jose"]) :=
+  .step
+    { inputs := Tel.ofList [Patient "Jose"]
+      consumes := []
+      produces := [ConsentRefused "Jose"] }
+    [Patient "Jose"]
+    (.bind (Patient.mk "Jose") .here .nil)
+
+-- ── Happy-path arrows (re-indexed for post-ConsentGiven context) ───────────
+
+abbrev afterConsentGiven : Ctx := joseCtx ++ [ConsentGiven "Jose"]
+
+def heartArrowCG : Arrow afterConsentGiven (afterConsentGiven ++ [HeartRate "Jose"]) :=
+  .step
+    { inputs := Tel.ofList [Patient "Jose", LegalMeasurementMeeting "Jose"]
+      consumes := []
+      produces := [HeartRate "Jose"] }
+    afterConsentGiven
+    (.bind (Patient.mk "Jose") .here
+      (.bind joseMeetingAllen (.there .here) .nil))
+
+abbrev afterHeartCG : Ctx := afterConsentGiven ++ [HeartRate "Jose"]
+
+def bpArrowCG : Arrow afterHeartCG (afterHeartCG ++ [BloodPressure "Jose"]) :=
+  .step
+    { inputs := Tel.ofList [Patient "Jose", LegalMeasurementMeeting "Jose"]
+      consumes := []
+      produces := [BloodPressure "Jose"] }
+    afterHeartCG
+    (.bind (Patient.mk "Jose") .here
+      (.bind joseMeetingAllen (.there .here) .nil))
+
+abbrev afterBPCG : Ctx := afterHeartCG ++ [BloodPressure "Jose"]
+
+def vo2ArrowCG : Arrow afterBPCG (afterBPCG ++ [VO2Max "Jose"]) :=
+  .step
+    { inputs := Tel.ofList [Patient "Jose", LegalMeasurementMeeting "Jose"]
+      consumes := []
+      produces := [VO2Max "Jose"] }
+    afterBPCG
+    (.bind (Patient.mk "Jose") .here
+      (.bind joseMeetingAllen (.there .here) .nil))
+
+abbrev afterVO2CG : Ctx := afterBPCG ++ [VO2Max "Jose"]
+
+def productsArrowCG : Arrow afterVO2CG (afterVO2CG ++ [ProductsOutput "Jose"]) :=
+  .step
+    { inputs := Tel.ofList [ConsentGiven "Jose", HeartRate "Jose",
+                             BloodPressure "Jose", VO2Max "Jose"]
+      consumes := []
+      produces := [ProductsOutput "Jose"] }
+    afterVO2CG
+    (.bind (ConsentGiven.mk (Patient.mk "Jose") "signed")
+           (.there (.there .here))
+      (.bind (HeartRate.heartRate (Patient.mk "Jose") 72)
+             (.there (.there (.there .here)))
+        (.bind (BloodPressure.bloodPressure (Patient.mk "Jose") 120)
+               (.there (.there (.there (.there .here))))
+          (.bind (VO2Max.vO2Max (Patient.mk "Jose") 45)
+                 (.there (.there (.there (.there (.there .here)))))
+            .nil))))
+
+abbrev afterProductsCG : Ctx := afterVO2CG ++ [ProductsOutput "Jose"]
+
+def assessmentArrowCG : Arrow afterProductsCG (afterProductsCG ++ [AssessmentResult "Jose"]) :=
+  .step
+    { inputs := Tel.ofList [Patient "Jose", ProductsOutput "Jose"]
+      consumes := []
+      produces := [AssessmentResult "Jose"] }
+    afterProductsCG
+    (.bind (Patient.mk "Jose") .here
+      (.bind (ProductsOutput.products "signed" 72 120 45)
+             (.there (.there (.there (.there (.there (.there .here))))))
+        .nil))
+
+-- ── The full happy-path sub-pipeline as a SheetDiagram ─────────────────────
+
+def happyPathSheet : SheetDiagram joseCtx [afterProductsCG ++ [AssessmentResult "Jose"]] :=
+  .pipe consentGivenArrow
+    (.pipe heartArrowCG
+      (.pipe bpArrowCG
+        (.pipe vo2ArrowCG
+          (.pipe productsArrowCG
+            (.arrow assessmentArrowCG)))))
+
+-- ── The refusal sub-pipeline as a SheetDiagram ─────────────────────────────
+
+/-- Refusal branch: run the refusal arrow then halt.
+    The arrow records the refusal; `halt` terminates the sheet so it
+    contributes no outcomes to the coproduct (like `Bottom` in Boxes). -/
+def refusalSheet : SheetDiagram [Patient "Jose"] [] :=
+  .pipe refusalArrow .halt
+
+-- ── Consent branching: the full SheetDiagram with two outcomes ─────────────
+
+/-- The consent-branching clinical pipeline.
+
+    Input:  [Patient "Jose", LegalMeasurementMeeting "Jose"]
+    Output: [ ...full measurement pipeline..., AssessmentResult "Jose" ]
+
+    The refusal branch is processed (the refusal arrow runs) but halted —
+    it contributes no outcomes to the output coproduct.  This mirrors the
+    `Bottom`-terminated `ConsentRefusal` from the Boxes system.
+
+    The `Split.idLeft` sends everything to `Γ_branch` with `Γ_par = []`.
+    Each `Selection` picks the elements needed for that branch. -/
+def consentBranching : SheetDiagram joseCtx
+    [afterProductsCG ++ [AssessmentResult "Jose"]] :=
+  .branch
+    (Split.idLeft joseCtx)                          -- everything to Γ_branch, Γ_par = []
+    (Selection.id joseCtx)                           -- consent branch: Patient + Meeting
+    (.cons .here .nil)                               -- refusal branch: Patient only
+    happyPathSheet                                   -- left: full measurement pipeline
+    refusalSheet                                     -- right: consent refused → halt
