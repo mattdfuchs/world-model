@@ -46,3 +46,34 @@ structure LegalMeeting where
   inCity    : clinicInPatientCity clinic patient
   canServe  : clinicianCanServe clinician patient
   isAssigned : assigned clinician clinic
+
+/-- A LegalMeasurementMeeting specialises LegalMeeting for the context of
+    taking a clinical measurement.  The patient name is an explicit type
+    parameter so that the meeting can only be used for the right patient —
+    `LegalMeasurementMeeting "Jose"` is a different type from
+    `LegalMeasurementMeeting "Alice"`.
+
+    The role attestations (`patientRole`, `clinicianRole`) and the shared-language
+    condition (`sharedLang`) are surfaced as first-class fields rather than bundled
+    inside `canServe`, so that audit logs and downstream steps can inspect each
+    condition individually without re-decomposing the conjunction. -/
+structure LegalMeasurementMeeting (patientName : String) where
+  {c cl : String}
+  clinic        : Clinic c
+  patient       : Human patientName
+  clinician     : Human cl
+  patientRole   : hasRole patient   .Patient
+  clinicianRole : hasRole clinician .Clinician
+  inCity        : clinicInPatientCity clinic patient
+  sharedLang    : canCommunicate clinician patient
+  isAssigned    : assigned clinician clinic
+
+/-- Every `LegalMeasurementMeeting` satisfies the weaker `LegalMeeting`
+    conditions, so it can be used wherever a `LegalMeeting` is required. -/
+def LegalMeasurementMeeting.toLegalMeeting {p : String} (m : LegalMeasurementMeeting p) : LegalMeeting :=
+  { clinic     := m.clinic
+    patient    := m.patient
+    clinician  := m.clinician
+    inCity     := m.inCity
+    canServe   := ⟨⟨m.clinicianRole⟩, ⟨m.patientRole⟩, m.sharedLang⟩
+    isAssigned := m.isAssigned }

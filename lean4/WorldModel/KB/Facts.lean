@@ -54,3 +54,18 @@ def valClinic_in_valencia  : isIn valClinic valencia    := .mk
 def niceClinic_in_nice     : isIn niceClinic nice       := .mk
 def parisClinic_in_paris   : isIn parisClinic paris     := .mk
 def londonClinic_in_london : isIn londonClinic london   := .mk
+
+-- ── Meeting proofs ────────────────────────────────────────────────────────────
+
+/-- Allen (clinician, ValClinic, Spanish) may legally take measurements for
+    Jose (patient, Valencia, Spanish).  Every field of `LegalMeasurementMeeting`
+    is discharged by a ground fact defined above. -/
+def joseMeetingAllen : LegalMeasurementMeeting "Jose" :=
+  { clinic        := valClinic
+    patient       := jose
+    clinician     := allen
+    patientRole   := jose_is_patient
+    clinicianRole := allen_is_clinician
+    inCity        := ⟨"Valencia", valencia, ⟨valClinic_in_valencia⟩, ⟨jose_lives_valencia⟩⟩
+    sharedLang    := ⟨"Spanish", spanish, ⟨allen_speaks_spanish⟩, ⟨jose_speaks_spanish⟩⟩
+    isAssigned    := allen_assigned_val }

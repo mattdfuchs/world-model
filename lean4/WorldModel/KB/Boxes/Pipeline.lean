@@ -17,11 +17,21 @@
        and the string type matches.
     2. Every input of every non-first stage is covered by at least one wire
        originating from an earlier stage.
+
+  A validated `Pipeline types wirings` is itself a `ToBox` instance:
+    • inputs  = the first stage's inputs
+    • outputs = the last stage's outputs
+  This allows a composed pipeline to be used as a single stage in a larger
+  pipeline.
 -/
 import WorldModel.KB.Boxes.Core
 
 -- Inhabited instances needed for list indexing with `!`
 private instance : Inhabited Box := ⟨⟨[], []⟩⟩
+
+-- Coercion: a single `(j, k)` pair is sugar for a one-element list,
+-- so `⟨"branch", (j, k)⟩` works alongside `⟨"branch", [(j1,k1), (j2,k2)]⟩`.
+instance : Coe (Nat × Nat) (List (Nat × Nat)) := ⟨fun p => [p]⟩
 
 /-- Wiring for one output branch.
     `params` has one `(Nat × Nat)` per branch parameter:
@@ -72,10 +82,28 @@ def validatePipeline (types : List Box) (wirings : List TypeWiring) : Bool :=
   wiresOk       types wirings &&
   inputsCovered types wirings
 
-/-- A compile-time witness that `types` and `wirings` form a valid pipeline.
-    Construct with `mkPipeline`; the proof is discharged by `decide`. -/
-structure Pipeline (types : List Box) (wirings : List TypeWiring) : Prop where
+/-- A validated, composable pipeline.
+
+    `Pipeline types wirings` is a `Type` (not merely a `Prop`) carrying a
+    compile-time proof that `types` and `wirings` form a legal pipeline.
+    Because it is a `Type`, it has a `ToBox` instance:
+
+      • inputs  = first stage's inputs
+      • outputs = last stage's outputs
+
+    This means a composed pipeline can itself be used as a single stage in a
+    larger pipeline, enabling hierarchical composition. -/
+structure Pipeline (types : List Box) (wirings : List TypeWiring) : Type where
   h : validatePipeline types wirings = true
+
+/-- A `Pipeline` is a `ToBox` instance whose `Box` exposes the first stage's
+    inputs and the last stage's outputs, making it composable as a single unit. -/
+instance {types : List Box} {wirings : List TypeWiring} :
+    ToBox (Pipeline types wirings) where
+  toBox := {
+    inputs  := (types.head?.map (·.inputs)).getD [],
+    outputs := (types.getLast?.map (·.outputs)).getD []
+  }
 
 /-- Build a `Pipeline`, validating the wiring at compile time.
     A type or coverage mismatch is a compile error. -/
@@ -85,3 +113,24 @@ def mkPipeline
     (h : validatePipeline types wirings = true := by decide)
     : Pipeline types wirings :=
   ⟨h⟩
+
+/-- Macro wrapper: resolves `ToBox` instances automatically so types can be
+    passed directly instead of being manually wrapped in `ToBox.toBox (α := ...)`.
+
+    ## Syntax
+
+        pipeline! [Type1, Type2, ...] [wiring1, wiring2, ...]
+
+    Expands to:
+
+        mkPipeline [ToBox.toBox (α := Type1), ToBox.toBox (α := Type2), ...]
+                   [wiring1, wiring2, ...] (by native_decide)
+-/
+macro "pipeline!" "[" ts:term,* "]" "[" ws:term,* "]" : term =>
+  `(mkPipeline [$[ ToBox.toBox (α := $ts) ],*] [$ws,*] (by native_decide))
+
+/-- Convenience accessor: returns the composed `Box` for a pipeline value,
+    equivalent to `ToBox.toBox (α := Pipeline types wirings)`. -/
+def Pipeline.box {types : List Box} {wirings : List TypeWiring}
+    (_ : Pipeline types wirings) : Box :=
+  ToBox.toBox (α := Pipeline types wirings)

@@ -15,6 +15,7 @@ def Proj (outputs : List (String × List Type)) (i : Nat) : Option (String × Li
 structure Box where
   inputs : List String
   outputs : List (String × List String)
+  deriving BEq, Repr
 
 class ToBox (α : Type) where
   toBox : Box
