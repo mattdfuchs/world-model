@@ -1,321 +1,268 @@
 /-
   WorldModel.KB.Arrow.Clinical
-  Full happy-path clinical pipeline using the indexed arrow system.
+  Full clinical pipeline using scope-derived constraints.
 
-  Key difference from the Boxes/Clinical system:
-    `LegalMeasurementMeeting "Jose"` is an OBJECT in the context,
-    not a type parameter.  The frame rule ensures it persists across
-    steps without being consumed.
+  Instead of a monolithic `LegalMeasurementMeeting`, constraints emerge from
+  nested scopes:
+    - Trial scope  → provides ClinicalTrial
+    - Clinic scope → provides Clinic, Clinician, SharedLangEvidence
+    - Room scope   → provides Room, Equipment, Equipment Qualifications
 
-  The pipeline models the happy path (consent obtained):
-    0. Consent         → produces ConsentingOutput
-    1. HeartMeasurement  → produces HeartRate
-    2. BPMeasurement     → produces BloodPressure
-    3. VO2MaxMeasurement → produces VO2Max
-    4. Products          → produces ProductsOutput
-    5. FinalAssessment   → produces AssessmentResult
-
-  ConsentRefusal (the refuse branch) requires branching composition
-  and is deferred to the nesting work.
+  Each measurement step declares exactly what it needs (equipment, qualification,
+  shared language). Missing constraints = type error.
 -/
 import WorldModel.KB.Arrow.Arrow
 import WorldModel.KB.Arrow.SheetDiagram
 import WorldModel.KB.Boxes           -- Patient, HeartRate, BloodPressure, VO2Max, etc.
-import WorldModel.KB.Relations       -- LegalMeasurementMeeting
-import WorldModel.KB.Facts           -- joseMeetingAllen
+import WorldModel.KB.Facts           -- speaks facts for SharedLangEvidence
 
--- ── Initial context ─────────────────────────────────────────────────────────────
+-- ── Evidence types ──────────────────────────────────────────────────────────
 
-/-- The starting context for Jose's clinical encounter:
-    a patient and proof that the meeting is legally valid. -/
-abbrev joseCtx : Ctx :=
-  [Patient "Jose", LegalMeasurementMeeting "Jose"]
+/-- Proof that a clinician and patient share a language.
+    Included in scope extensions so inner steps can find it via Satisfy/Elem. -/
+structure SharedLangEvidence (cn pn : String) : Type where
+  lang : String
+  cSpeaks : speaks (Human.mk cn) (Language.mk lang)
+  pSpeaks : speaks (Human.mk pn) (Language.mk lang)
 
--- ── Stage 0: Consent arrow ────────────────────────────────────────────────────
+/-- Concrete evidence that Allen and Jose share Spanish. -/
+def allenJoseLangEvidence : SharedLangEvidence "Allen" "Jose" :=
+  { lang := "Spanish"
+    cSpeaks := allen_speaks_spanish
+    pSpeaks := jose_speaks_spanish }
 
-abbrev consentInputs : Ctx := [Patient "Jose"]
-abbrev consentProduces : Ctx := [ConsentingOutput "Jose"]
-
-def consentArrow : Arrow joseCtx (joseCtx ++ consentProduces) :=
-  .step
-    { inputs := Tel.ofList consentInputs, consumes := [], produces := consentProduces }
-    joseCtx
-    (.bind (Patient.mk "Jose") .here .nil)
-
--- ── Stage 1: Heart measurement arrow ─────────────────────────────────────────
-
-abbrev afterConsent : Ctx := joseCtx ++ [ConsentingOutput "Jose"]
-
-def heartMeasurementSpec : Spec where
-  inputs   := Tel.ofList [Patient "Jose", LegalMeasurementMeeting "Jose"]
-  consumes := []
-  produces := [HeartRate "Jose"]
-
-/-- Prove the heart measurement's inputs exist in `afterConsent`. -/
-def heartSatisfy : Satisfy heartMeasurementSpec.inputs afterConsent afterConsent :=
-  .bind (Patient.mk "Jose") .here
-    (.bind joseMeetingAllen (.there .here)
-      .nil)
-
-/-- Heart measurement: consumes nothing, produces a `HeartRate`. -/
-def heartArrow : Arrow afterConsent (afterConsent ++ [HeartRate "Jose"]) :=
-  .step heartMeasurementSpec afterConsent heartSatisfy
-
--- ── Stage 2: Blood pressure measurement arrow ───────────────────────────────
-
-abbrev afterHeart : Ctx := afterConsent ++ [HeartRate "Jose"]
-
-def bpMeasurementSpec : Spec where
-  inputs   := Tel.ofList [Patient "Jose", LegalMeasurementMeeting "Jose"]
-  consumes := []
-  produces := [BloodPressure "Jose"]
-
-/-- Patient and meeting are still in context after the heart measurement
-    (frame rule — they were not consumed). -/
-def bpSatisfy : Satisfy bpMeasurementSpec.inputs afterHeart afterHeart :=
-  .bind (Patient.mk "Jose") .here
-    (.bind joseMeetingAllen (.there .here)
-      .nil)
-
-def bpArrow : Arrow afterHeart (afterHeart ++ [BloodPressure "Jose"]) :=
-  .step bpMeasurementSpec afterHeart bpSatisfy
-
--- ── Stage 3: VO2 max measurement arrow ───────────────────────────────────────
-
-abbrev afterBP : Ctx := afterHeart ++ [BloodPressure "Jose"]
-
-def vo2MeasurementSpec : Spec where
-  inputs   := Tel.ofList [Patient "Jose", LegalMeasurementMeeting "Jose"]
-  consumes := []
-  produces := [VO2Max "Jose"]
-
-def vo2Satisfy : Satisfy vo2MeasurementSpec.inputs afterBP afterBP :=
-  .bind (Patient.mk "Jose") .here
-    (.bind joseMeetingAllen (.there .here)
-      .nil)
-
-def vo2Arrow : Arrow afterBP (afterBP ++ [VO2Max "Jose"]) :=
-  .step vo2MeasurementSpec afterBP vo2Satisfy
-
--- ── Stage 4: Products arrow ──────────────────────────────────────────────────
-
-abbrev afterVO2 : Ctx := afterBP ++ [VO2Max "Jose"]
--- afterVO2 = [Patient "Jose", LegalMeasurementMeeting "Jose",
---             ConsentingOutput "Jose", HeartRate "Jose",
---             BloodPressure "Jose", VO2Max "Jose"]
-
-def productsMeasurementSpec : Spec where
-  inputs   := Tel.ofList [ConsentingOutput "Jose", HeartRate "Jose",
-                           BloodPressure "Jose", VO2Max "Jose"]
-  consumes := []
-  produces := [ProductsOutput "Jose"]
-
-/-- Products needs 4 types from the context.  Each `Elem` proof uses
-    `.there` chains to find the right position in `afterVO2`. -/
-def productsSatisfy : Satisfy productsMeasurementSpec.inputs afterVO2 afterVO2 :=
-  .bind (ConsentingOutput.consent (Patient.mk "Jose") "signed")
-        (.there (.there .here))                           -- index 2: ConsentingOutput
-    (.bind (HeartRate.heartRate (Patient.mk "Jose") 72)
-           (.there (.there (.there .here)))               -- index 3: HeartRate
-      (.bind (BloodPressure.bloodPressure (Patient.mk "Jose") 120)
-             (.there (.there (.there (.there .here))))    -- index 4: BloodPressure
-        (.bind (VO2Max.vO2Max (Patient.mk "Jose") 45)
-               (.there (.there (.there (.there (.there .here)))))  -- index 5: VO2Max
-          .nil)))
-
-def productsArrow : Arrow afterVO2 (afterVO2 ++ [ProductsOutput "Jose"]) :=
-  .step productsMeasurementSpec afterVO2 productsSatisfy
-
--- ── Stage 5: Final assessment arrow ──────────────────────────────────────────
-
-abbrev afterProducts : Ctx := afterVO2 ++ [ProductsOutput "Jose"]
--- afterProducts = [Patient "Jose", LegalMeasurementMeeting "Jose",
---                  ConsentingOutput "Jose", HeartRate "Jose",
---                  BloodPressure "Jose", VO2Max "Jose",
---                  ProductsOutput "Jose"]
-
-def assessmentSpec : Spec where
-  inputs   := Tel.ofList [Patient "Jose", ProductsOutput "Jose"]
-  consumes := []
-  produces := [AssessmentResult "Jose"]
-
-def assessmentSatisfy : Satisfy assessmentSpec.inputs afterProducts afterProducts :=
-  .bind (Patient.mk "Jose") .here                         -- index 0: Patient
-    (.bind (ProductsOutput.products "signed" 72 120 45)
-           (.there (.there (.there (.there (.there (.there .here))))))  -- index 6: ProductsOutput
-      .nil)
-
-def assessmentArrow : Arrow afterProducts (afterProducts ++ [AssessmentResult "Jose"]) :=
-  .step assessmentSpec afterProducts assessmentSatisfy
-
--- ── Composed clinical pipeline ──────────────────────────────────────────────
-
-/-- The full happy-path clinical pipeline: consent + three measurements +
-    products aggregation + final assessment.
-
-    Input:  [Patient "Jose", LegalMeasurementMeeting "Jose"]
-    Output: [Patient "Jose", LegalMeasurementMeeting "Jose",
-             ConsentingOutput "Jose", HeartRate "Jose",
-             BloodPressure "Jose", VO2Max "Jose",
-             ProductsOutput "Jose", AssessmentResult "Jose"]
-
-    Note: ConsentRefusal (the refuse branch from the original pipeline)
-    requires branching composition and is deferred to the nesting work. -/
-def clinicalPipeline : Arrow joseCtx
-    (joseCtx ++ [ConsentingOutput "Jose", HeartRate "Jose",
-                  BloodPressure "Jose", VO2Max "Jose",
-                  ProductsOutput "Jose", AssessmentResult "Jose"]) :=
-  consentArrow ⟫ heartArrow ⟫ bpArrow ⟫ vo2Arrow ⟫ productsArrow ⟫ assessmentArrow
-
--- ── mkArrow helper demonstration ────────────────────────────────────────────
-
-/-- Same heart arrow built with the `mkArrow` helper (using afterConsent context). -/
-def heartArrow' : Arrow afterConsent (afterConsent ++ [HeartRate "Jose"]) :=
-  mkArrow
-    [Patient "Jose", LegalMeasurementMeeting "Jose"]
-    [HeartRate "Jose"]
-    (.bind (Patient.mk "Jose") .here
-      (.bind joseMeetingAllen (.there .here)
-        .nil))
-
--- ══════════════════════════════════════════════════════════════════════════════
--- Consent branching via SheetDiagram
--- ══════════════════════════════════════════════════════════════════════════════
-
--- ── Branch-specific consent types ──────────────────────────────────────────
+-- ── Consent and disqualification types ─────────────────────────────────────
 
 /-- Consent was obtained — carries the patient and the consent note. -/
 inductive ConsentGiven (name : String) : Type where
   | mk : Patient name → String → ConsentGiven name
 
-/-- Consent was refused — carries the patient and the refusal reason. -/
-inductive ConsentRefused (name : String) : Type where
-  | mk : Patient name → String → ConsentRefused name
+/-- Reasons a patient can be disqualified at any measurement step. -/
+inductive DisqualificationReason : Type where
+  | consentRefused : String → DisqualificationReason
+  | heartRateTooFast
+  | bloodPressureTooHigh
+  | vo2MaxTooLow
 
--- ── Consent branch arrows ──────────────────────────────────────────────────
+/-- Patient disqualified — carries the patient and the reason. -/
+inductive NonQualifying (name : String) : Type where
+  | mk : Patient name → DisqualificationReason → NonQualifying name
 
-/-- Arrow for the consent-given branch: Patient + Meeting → ConsentGiven. -/
-def consentGivenArrow : Arrow joseCtx (joseCtx ++ [ConsentGiven "Jose"]) :=
+-- ── Initial context ─────────────────────────────────────────────────────────
+
+/-- Starting context: just the patient. -/
+abbrev joseCtx : Ctx := [Patient "Jose"]
+
+-- ── Scope extensions ────────────────────────────────────────────────────────
+
+/-- Trial scope: just the trial object. -/
+abbrev trialExt : Ctx := [ClinicalTrial "OurTrial"]
+
+/-- Clinic scope: clinic + clinician + shared language evidence. -/
+abbrev clinicExt : Ctx := [Clinic "ValClinic", Clinician "Allen",
+                            SharedLangEvidence "Allen" "Jose"]
+
+/-- Room scope: room marker + equipment + clinician qualifications. -/
+abbrev roomExt : Ctx := [Room "Room3", ExamBed, BPMonitor, VO2Equipment,
+                          ExamBedQual "Allen", BPMonitorQual "Allen",
+                          VO2EquipmentQual "Allen"]
+
+-- ── Full inner context ──────────────────────────────────────────────────────
+
+/-- The full context inside all three nested scopes.
+    Index  Type
+    0      Room "Room3"
+    1      ExamBed
+    2      BPMonitor
+    3      VO2Equipment
+    4      ExamBedQual "Allen"
+    5      BPMonitorQual "Allen"
+    6      VO2EquipmentQual "Allen"
+    7      Clinic "ValClinic"
+    8      Clinician "Allen"
+    9      SharedLangEvidence "Allen" "Jose"
+    10     ClinicalTrial "OurTrial"
+    11     Patient "Jose" -/
+abbrev insideAllScopes : Ctx :=
+  roomExt ++ (clinicExt ++ (trialExt ++ joseCtx))
+
+-- ── Failure selection and disqualification arrow ───────────────────────────
+
+/-- Select the 12 scope items from any extended context `insideAllScopes ++ extra`.
+    All failure branches use this to drop produced items before disqualifying. -/
+def insideAllScopesSel {extra : Ctx}
+    : Selection (insideAllScopes ++ extra) insideAllScopes :=
+  Selection.prefix insideAllScopes extra
+
+/-- Shared disqualification arrow: finds Patient at index 11, produces NonQualifying. -/
+def nqArrow : Arrow insideAllScopes (insideAllScopes ++ [NonQualifying "Jose"]) :=
   .step
     { inputs := Tel.ofList [Patient "Jose"]
+      consumes := []
+      produces := [NonQualifying "Jose"] }
+    insideAllScopes
+    (.bind (Patient.mk "Jose")
+           (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))))
+      .nil)
+
+-- ── Stage 0: Consent ────────────────────────────────────────────────────────
+
+def consentArrow : Arrow insideAllScopes (insideAllScopes ++ [ConsentGiven "Jose"]) :=
+  .step
+    { inputs := Tel.ofList [Patient "Jose", SharedLangEvidence "Allen" "Jose"]
       consumes := []
       produces := [ConsentGiven "Jose"] }
-    joseCtx
-    (.bind (Patient.mk "Jose") .here .nil)
+    insideAllScopes
+    (.bind (Patient.mk "Jose")
+           (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))))
+      (.bind allenJoseLangEvidence
+             (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))
+        .nil))
 
-/-- Arrow for the consent-refused branch: Patient → ConsentRefused.
-    Input context is just [Patient "Jose"] (no meeting needed for refusal). -/
-def refusalArrow : Arrow [Patient "Jose"] ([Patient "Jose"] ++ [ConsentRefused "Jose"]) :=
+-- ── Stage 1: Heart measurement ──────────────────────────────────────────────
+
+abbrev afterConsent : Ctx := insideAllScopes ++ [ConsentGiven "Jose"]
+
+def heartArrow : Arrow afterConsent (afterConsent ++ [HeartRate "Jose"]) :=
   .step
-    { inputs := Tel.ofList [Patient "Jose"]
-      consumes := []
-      produces := [ConsentRefused "Jose"] }
-    [Patient "Jose"]
-    (.bind (Patient.mk "Jose") .here .nil)
-
--- ── Happy-path arrows (re-indexed for post-ConsentGiven context) ───────────
-
-abbrev afterConsentGiven : Ctx := joseCtx ++ [ConsentGiven "Jose"]
-
-def heartArrowCG : Arrow afterConsentGiven (afterConsentGiven ++ [HeartRate "Jose"]) :=
-  .step
-    { inputs := Tel.ofList [Patient "Jose", LegalMeasurementMeeting "Jose"]
+    { inputs := Tel.ofList [Patient "Jose", Clinician "Allen", ExamBed,
+                            ExamBedQual "Allen", SharedLangEvidence "Allen" "Jose"]
       consumes := []
       produces := [HeartRate "Jose"] }
-    afterConsentGiven
-    (.bind (Patient.mk "Jose") .here
-      (.bind joseMeetingAllen (.there .here) .nil))
+    afterConsent
+    (.bind (Patient.mk "Jose")
+           (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))))
+      (.bind (Clinician.mk "Allen")
+             (.there (.there (.there (.there (.there (.there (.there (.there .here))))))))
+        (.bind ExamBed.mk
+               (.there .here)
+          (.bind (ExamBedQual.mk "Allen")
+                 (.there (.there (.there (.there .here))))
+            (.bind allenJoseLangEvidence
+                   (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))
+              .nil)))))
 
-abbrev afterHeartCG : Ctx := afterConsentGiven ++ [HeartRate "Jose"]
+-- ── Stage 2: Blood pressure measurement ─────────────────────────────────────
 
-def bpArrowCG : Arrow afterHeartCG (afterHeartCG ++ [BloodPressure "Jose"]) :=
+abbrev afterHeart : Ctx := afterConsent ++ [HeartRate "Jose"]
+
+def bpArrow : Arrow afterHeart (afterHeart ++ [BloodPressure "Jose"]) :=
   .step
-    { inputs := Tel.ofList [Patient "Jose", LegalMeasurementMeeting "Jose"]
+    { inputs := Tel.ofList [Patient "Jose", Clinician "Allen", BPMonitor,
+                            BPMonitorQual "Allen", SharedLangEvidence "Allen" "Jose"]
       consumes := []
       produces := [BloodPressure "Jose"] }
-    afterHeartCG
-    (.bind (Patient.mk "Jose") .here
-      (.bind joseMeetingAllen (.there .here) .nil))
+    afterHeart
+    (.bind (Patient.mk "Jose")
+           (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))))
+      (.bind (Clinician.mk "Allen")
+             (.there (.there (.there (.there (.there (.there (.there (.there .here))))))))
+        (.bind BPMonitor.mk
+               (.there (.there .here))
+          (.bind (BPMonitorQual.mk "Allen")
+                 (.there (.there (.there (.there (.there .here)))))
+            (.bind allenJoseLangEvidence
+                   (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))
+              .nil)))))
 
-abbrev afterBPCG : Ctx := afterHeartCG ++ [BloodPressure "Jose"]
+-- ── Stage 3: VO2 max measurement ────────────────────────────────────────────
 
-def vo2ArrowCG : Arrow afterBPCG (afterBPCG ++ [VO2Max "Jose"]) :=
+abbrev afterBP : Ctx := afterHeart ++ [BloodPressure "Jose"]
+
+def vo2Arrow : Arrow afterBP (afterBP ++ [VO2Max "Jose"]) :=
   .step
-    { inputs := Tel.ofList [Patient "Jose", LegalMeasurementMeeting "Jose"]
+    { inputs := Tel.ofList [Patient "Jose", Clinician "Allen", VO2Equipment,
+                            VO2EquipmentQual "Allen", SharedLangEvidence "Allen" "Jose"]
       consumes := []
       produces := [VO2Max "Jose"] }
-    afterBPCG
-    (.bind (Patient.mk "Jose") .here
-      (.bind joseMeetingAllen (.there .here) .nil))
+    afterBP
+    (.bind (Patient.mk "Jose")
+           (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))))
+      (.bind (Clinician.mk "Allen")
+             (.there (.there (.there (.there (.there (.there (.there (.there .here))))))))
+        (.bind VO2Equipment.mk
+               (.there (.there (.there .here)))
+          (.bind (VO2EquipmentQual.mk "Allen")
+                 (.there (.there (.there (.there (.there (.there .here))))))
+            (.bind allenJoseLangEvidence
+                   (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))
+              .nil)))))
 
-abbrev afterVO2CG : Ctx := afterBPCG ++ [VO2Max "Jose"]
+-- ── Stage 4: Products ───────────────────────────────────────────────────────
 
-def productsArrowCG : Arrow afterVO2CG (afterVO2CG ++ [ProductsOutput "Jose"]) :=
+abbrev afterVO2 : Ctx := afterBP ++ [VO2Max "Jose"]
+
+def productsArrow : Arrow afterVO2 (afterVO2 ++ [ProductsOutput "Jose"]) :=
   .step
     { inputs := Tel.ofList [ConsentGiven "Jose", HeartRate "Jose",
-                             BloodPressure "Jose", VO2Max "Jose"]
+                            BloodPressure "Jose", VO2Max "Jose"]
       consumes := []
       produces := [ProductsOutput "Jose"] }
-    afterVO2CG
+    afterVO2
     (.bind (ConsentGiven.mk (Patient.mk "Jose") "signed")
-           (.there (.there .here))
+           (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here))))))))))))
       (.bind (HeartRate.heartRate (Patient.mk "Jose") 72)
-             (.there (.there (.there .here)))
+             (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))))))
         (.bind (BloodPressure.bloodPressure (Patient.mk "Jose") 120)
-               (.there (.there (.there (.there .here))))
+               (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here))))))))))))))
           (.bind (VO2Max.vO2Max (Patient.mk "Jose") 45)
-                 (.there (.there (.there (.there (.there .here)))))
+                 (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))))))))
             .nil))))
 
-abbrev afterProductsCG : Ctx := afterVO2CG ++ [ProductsOutput "Jose"]
+-- ── Stage 5: Final assessment ───────────────────────────────────────────────
 
-def assessmentArrowCG : Arrow afterProductsCG (afterProductsCG ++ [AssessmentResult "Jose"]) :=
+abbrev afterProducts : Ctx := afterVO2 ++ [ProductsOutput "Jose"]
+
+def assessmentArrow : Arrow afterProducts (afterProducts ++ [AssessmentResult "Jose"]) :=
   .step
     { inputs := Tel.ofList [Patient "Jose", ProductsOutput "Jose"]
       consumes := []
       produces := [AssessmentResult "Jose"] }
-    afterProductsCG
-    (.bind (Patient.mk "Jose") .here
+    afterProducts
+    (.bind (Patient.mk "Jose")
+           (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))))
       (.bind (ProductsOutput.products "signed" 72 120 45)
-             (.there (.there (.there (.there (.there (.there .here))))))
+             (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here))))))))))))))))
         .nil))
 
--- ── The full happy-path sub-pipeline as a SheetDiagram ─────────────────────
+-- ── Scoped clinical pipeline ────────────────────────────────────────────────
 
-def happyPathSheet : SheetDiagram joseCtx [afterProductsCG ++ [AssessmentResult "Jose"]] :=
-  .pipe consentGivenArrow
-    (.pipe heartArrowCG
-      (.pipe bpArrowCG
-        (.pipe vo2ArrowCG
-          (.pipe productsArrowCG
-            (.arrow assessmentArrowCG)))))
+/-- The full clinical pipeline with measurement branching.
 
--- ── The refusal sub-pipeline as a SheetDiagram ─────────────────────────────
+    Each measurement can disqualify the patient (consent refused, heart rate
+    too fast, BP too high, VO2 too low).  Failure branches coalesce via `.join`
+    into a single `NonQualifying` outcome.
 
-/-- Refusal branch: run the refusal arrow then halt.
-    The arrow records the refusal; `halt` terminates the sheet so it
-    contributes no outcomes to the coproduct (like `Bottom` in Boxes). -/
-def refusalSheet : SheetDiagram [Patient "Jose"] [] :=
-  .pipe refusalArrow .halt
+    Start:  [Patient "Jose"]
+    Outcomes:
+      1. [Patient "Jose", NonQualifying "Jose"]           — disqualified
+      2. [Patient "Jose", ConsentGiven "Jose", ...]       — fully qualified
 
--- ── Consent branching: the full SheetDiagram with two outcomes ─────────────
-
-/-- The consent-branching clinical pipeline.
-
-    Input:  [Patient "Jose", LegalMeasurementMeeting "Jose"]
-    Output: [ ...full measurement pipeline..., AssessmentResult "Jose" ]
-
-    The refusal branch is processed (the refusal arrow runs) but halted —
-    it contributes no outcomes to the output coproduct.  This mirrors the
-    `Bottom`-terminated `ConsentRefusal` from the Boxes system.
-
-    The `Split.idLeft` sends everything to `Γ_branch` with `Γ_par = []`.
-    Each `Selection` picks the elements needed for that branch. -/
-def consentBranching : SheetDiagram joseCtx
-    [afterProductsCG ++ [AssessmentResult "Jose"]] :=
-  .branch
-    (Split.idLeft joseCtx)                          -- everything to Γ_branch, Γ_par = []
-    (Selection.id joseCtx)                           -- consent branch: Patient + Meeting
-    (.cons .here .nil)                               -- refusal branch: Patient only
-    happyPathSheet                                   -- left: full measurement pipeline
-    refusalSheet                                     -- right: consent refused → halt
+    Four branch points (consent, heart, BP, VO2), three `.join`s. -/
+def scopedClinicalPipeline : SheetDiagram joseCtx
+    [[Patient "Jose", NonQualifying "Jose"],
+     joseCtx ++ [ConsentGiven "Jose", HeartRate "Jose",
+                  BloodPressure "Jose", VO2Max "Jose",
+                  ProductsOutput "Jose", AssessmentResult "Jose"]] :=
+  .scope trialExt
+    (.scope clinicExt
+      (.scope roomExt
+        (.join (.join (.join
+          (.branch (Split.idLeft insideAllScopes)
+            insideAllScopesSel (Selection.id insideAllScopes)
+            (.arrow nqArrow)
+            (.pipe consentArrow
+              (.pipe heartArrow
+                (.branch (Split.idLeft afterHeart)
+                  insideAllScopesSel (Selection.id afterHeart)
+                  (.arrow nqArrow)
+                  (.pipe bpArrow
+                    (.branch (Split.idLeft afterBP)
+                      insideAllScopesSel (Selection.id afterBP)
+                      (.arrow nqArrow)
+                      (.pipe vo2Arrow
+                        (.branch (Split.idLeft afterVO2)
+                          insideAllScopesSel (Selection.id afterVO2)
+                          (.arrow nqArrow)
+                          (.pipe productsArrow
+                            (.arrow assessmentArrow)))))))))))))))

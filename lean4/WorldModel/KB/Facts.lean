@@ -29,6 +29,13 @@ def londonClinic : Clinic "LondonClinic" := .mk "LondonClinic"
 
 -- Clinical trials
 def ourTrial : ClinicalTrial "OurTrial" := .mk "OurTrial"
+def ourTrialInfo : ClinicalTrialInfo "OurTrial" := { approvedClinics := ["ValClinic"] }
+
+-- Clinic info
+def valClinicInfo : ClinicInfo "ValClinic" := { clinicians := ["Allen"], rooms := ["Room3"] }
+
+-- Rooms
+def room3 : RoomInfo "Room3" := { equipment := [ExamBed, BPMonitor, VO2Equipment] }
 
 -- Ground relation facts
 

@@ -24,3 +24,8 @@ def Selection.weaken : Selection Γ Δ → Selection (β :: Γ) Δ
 def Selection.id : (Γ : Ctx) → Selection Γ Γ
   | []     => .nil
   | _ :: Γ => .cons .here (Selection.id Γ).weaken
+
+/-- Prefix selection: select the first `|Γ|` elements from `Γ ++ extra`. -/
+def Selection.prefix : (Γ : Ctx) → (extra : Ctx) → Selection (Γ ++ extra) Γ
+  | [],     _ => .nil
+  | _ :: Γ, extra => .cons .here (Selection.prefix Γ extra).weaken
