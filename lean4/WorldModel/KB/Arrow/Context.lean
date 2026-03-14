@@ -53,3 +53,10 @@ def Elem.appendRight (e : Elem α Γ₁) (Γ₂ : Ctx) : Elem α (Γ₁ ++ Γ₂
 def Elem.appendLeft : (Γ₁ : Ctx) → Elem α Γ₂ → Elem α (Γ₁ ++ Γ₂)
   | [],      e => e
   | _ :: Γ₁, e => .there (Elem.appendLeft Γ₁ e)
+
+/-- Tactic that resolves `Elem α Γ` goals automatically by searching
+    through the context list. Eliminates manual de Bruijn index counting. -/
+syntax "elem_tac" : tactic
+macro_rules
+  | `(tactic| elem_tac) =>
+    `(tactic| first | exact .here | (apply Elem.there; elem_tac))

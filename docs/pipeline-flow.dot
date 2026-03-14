@@ -1,0 +1,51 @@
+digraph pipeline {
+  rankdir=TB;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=9, style=filled, shape=box, fillcolor="#e8f0fe", color="#4a86c8", height=0.4, margin="0.08,0.04"];
+  edge [fontname="Helvetica", fontsize=8];
+  nodesep=0.25;
+  ranksep=0.35;
+
+  // Scopes as subgraphs
+  subgraph cluster_trial {
+    label="scope: trial (ClinicalTrial \"OurTrial\")";
+    style=dashed; color="#888888"; fontcolor="#555555"; fontsize=11;
+    labeljust=l;
+
+    subgraph cluster_clinic {
+      label="scope: clinic (ValClinic, Allen, SharedLangEvidence)";
+      style=dashed; color="#888888"; fontcolor="#555555"; fontsize=11;
+      labeljust=l;
+
+      subgraph cluster_room {
+        label="scope: room (Room3, Equipment, Qualifications)";
+        style=dashed; color="#888888"; fontcolor="#555555"; fontsize=11;
+        labeljust=l;
+
+        patient [label="Patient \"Jose\"", shape=oval, fillcolor="#d4edda", color="#28a745"];
+
+        consent [label="consent\n-> ConsentGiven"];
+        heart [label="heartMeasurement\n-> HeartRate"];
+        bp [label="bpMeasurement\n-> BloodPressure"];
+        vo2 [label="vo2Measurement\n-> VO2Max"];
+        products [label="products\n-> ProductsOutput"];
+        assessment [label="assessment\n-> AssessmentResult"];
+
+        nq [label="NonQualifying\n(disqualified)", shape=oval, fillcolor="#f8d7da", color="#dc3545"];
+        success [label="AssessmentResult\n(+ all measurements)", shape=oval, fillcolor="#d4edda", color="#28a745"];
+
+        patient -> consent;
+        consent -> heart [label="  pass"];
+        consent -> nq [label="fail", style=dashed, color="#dc3545", fontcolor="#dc3545"];
+        heart -> bp [label="  pass"];
+        heart -> nq [label="fail", style=dashed, color="#dc3545", fontcolor="#dc3545"];
+        bp -> vo2 [label="  pass"];
+        bp -> nq [label="fail", style=dashed, color="#dc3545", fontcolor="#dc3545"];
+        vo2 -> products [label="  pass"];
+        vo2 -> nq [label="fail", style=dashed, color="#dc3545", fontcolor="#dc3545"];
+        products -> assessment;
+        assessment -> success;
+      }
+    }
+  }
+}

@@ -4,3 +4,4 @@ import WorldModel.KB.Arrow.Arrow
 import WorldModel.KB.Arrow.Selection
 import WorldModel.KB.Arrow.SheetDiagram
 import WorldModel.KB.Arrow.Clinical
+import WorldModel.KB.Arrow.Erase

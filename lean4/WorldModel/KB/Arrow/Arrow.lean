@@ -41,11 +41,11 @@ inductive Arrow : Ctx → Ctx → Type 1 where
   | swap : Arrow (Γ₁ ++ Γ₂) (Γ₂ ++ Γ₁)
 
 /-- Build an arrow from flat input/output lists and a satisfaction proof. -/
-def mkArrow {Γ : Ctx} (inputs produces : Ctx)
+def mkArrow {Γ : Ctx} (name : String) (inputs produces : Ctx)
     (satisfy : Satisfy (Tel.ofList inputs) Γ Γ)
     : Arrow Γ (Γ ++ produces) :=
   .step
-    { inputs := Tel.ofList inputs, consumes := [], produces := produces }
+    { name := name, inputs := Tel.ofList inputs, consumes := [], produces := produces }
     Γ
     satisfy
 

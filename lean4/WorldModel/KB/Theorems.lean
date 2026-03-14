@@ -4,6 +4,8 @@
 -/
 import WorldModel.KB.Facts
 
+open KB.Facts
+
 -- Communication reachability
 
 theorem allen_can_communicate_with_jose : canCommunicate allen jose :=

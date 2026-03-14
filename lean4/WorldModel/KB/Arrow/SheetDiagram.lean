@@ -33,6 +33,6 @@ inductive SheetDiagram : Ctx → List Ctx → Type 1 where
       → SheetDiagram Γ (Δs₁ ++ Δs₂)
   | join  : SheetDiagram Γ (Δ :: Δ :: rest) → SheetDiagram Γ (Δ :: rest)
   | halt  : SheetDiagram Γ []
-  | scope : (ext : Ctx)
+  | scope : (label : String) → (ext : Ctx)
            → SheetDiagram (ext ++ Γ) (Δs.map (ext ++ ·))
            → SheetDiagram Γ Δs

@@ -1,0 +1,1394 @@
+{
+  "name": "Pipeline Construction",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mcp-neo4j:7011/mcp",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.NEO4J_MCP_AUTH_HEADER }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"n8n-pipeline\",\"version\":\"0.1.0\"}},\"id\":1}",
+        "options": {}
+      },
+      "id": "neo4j-init",
+      "name": "Neo4j MCP Init",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        300,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mcp-neo4j:7011/mcp",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.NEO4J_MCP_AUTH_HEADER }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"name\":\"write-cypher\",\"arguments\":{\"query\":\"MATCH (n) DETACH DELETE n\"}},\"id\":2}",
+        "options": {}
+      },
+      "id": "delete-all",
+      "name": "Delete All Nodes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        600,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const axios = require('axios');\nconst fs = require('fs');\nconst raw = fs.readFileSync('/home/node/.n8n-files/script.txt', 'utf8');\nconst stmts = raw.split(';').map(s => s.trim()).filter(s => s.length > 0);\nconst auth = $env.NEO4J_MCP_AUTH_HEADER;\nlet ok = 0, fail = 0, errors = [];\nfor (let i = 0; i < stmts.length; i++) {\n  try {\n    const res = await axios.post('http://mcp-neo4j:7011/mcp', {\n      jsonrpc: '2.0',\n      method: 'tools/call',\n      params: { name: 'write-cypher', arguments: { query: stmts[i] } },\n      id: 100 + i\n    }, {\n      headers: { 'Authorization': auth, 'Content-Type': 'application/json' },\n      timeout: 30000\n    });\n    if (res.data && res.data.result && res.data.result.isError) {\n      fail++;\n      errors.push({ stmt: i, error: res.data.result.content[0].text });\n    } else {\n      ok++;\n    }\n  } catch (e) {\n    fail++;\n    errors.push({ stmt: i, error: e.message });\n  }\n}\nreturn [{ json: { total: stmts.length, ok, fail, errors: errors.slice(0, 5) } }];"
+      },
+      "id": "seed-db",
+      "name": "Seed DB",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-mcp:7010/lean/command",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"cmd\": \"import WorldModel.KB.Arrow.Clinical\"}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "warm-up-lean",
+      "name": "Warm Up Lean",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1500,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "chat-trigger",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "pipeline-chat-webhook"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "You are a request classifier. Analyze the user's input and determine if it is:\n1. A \"query\" \u2014 asking for information about the database\n2. A \"pipeline\" \u2014 requesting to set up, arrange, or schedule a clinical workflow, meeting, or measurement pipeline for a patient\n\nRespond with ONLY a JSON object, no other text:\n{\"type\": \"query\", \"prompt\": \"<original user input>\"}\nor\n{\"type\": \"pipeline\", \"prompt\": \"<original user input>\"}",
+          "maxIterations": 3
+        }
+      },
+      "id": "router-agent",
+      "name": "Router Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "model": "claude-haiku-4-5-20251001",
+        "options": {
+          "maxTokensToSample": 256
+        }
+      },
+      "id": "router-llm",
+      "name": "Router LLM",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.2,
+      "position": [
+        300,
+        200
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "a58asT6g6X06bWnB",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.output;\nconst text = raw.replace(/^```(?:json)?\\n?/gm, '').replace(/```$/gm, '').trim();\ntry {\n  const parsed = JSON.parse(text);\n  return [{ json: { type: parsed.type, prompt: parsed.prompt } }];\n} catch (e) {\n  return [{ json: { type: 'query', prompt: raw } }];\n}"
+      },
+      "id": "parse-route",
+      "name": "Parse Route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-pipeline",
+              "leftValue": "={{ $json.type }}",
+              "rightValue": "pipeline",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-pipeline",
+      "name": "IF Is Pipeline",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prompt = $input.first().json.prompt;\nreturn [{ json: { designerInput: prompt, originalPrompt: prompt } }];"
+      },
+      "id": "prep-input",
+      "name": "Prep Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.designerInput }}",
+        "options": {
+          "systemMessage": "# Designer Agent \u2014 System Prompt\n\nYou are a clinical pipeline designer. You receive a user request (e.g., \"Set up an initial meeting for Jose for the current clinical trial; if he consents, get his heart rate, blood pressure, and VO2 max\") and produce a pipeline plan that a Proof Agent will formalize in Lean 4.\n\n## Your tools\n\n- **read_cypher**: Run read-only Cypher queries against the knowledge base. **Batch your queries** \u2014 use OPTIONAL MATCH and multiple patterns to gather everything in 1-2 calls, not one query per fact.\n- **get_neo4j_schema**: Only call if the schema below has been compacted away from context.\n\n## Schema\n\n```\n(Human {name})-[:hasRole]->(Role), -[:speaks]->(Language {name}), -[:lives]->(City {name}), -[:assigned]->(Clinic {name}), -[:hasQualification]->(ExamBedQual|BPMonitorQual|VO2EquipmentQual)\n(Clinic)-[:isIn]->(City), -[:clinicHasRoom]->(Room {name})\n(Room)-[:roomHasExamBed]->(ExamBed), -[:roomHasBPMonitor]->(BPMonitor), -[:roomHasVO2Equip]->(VO2Equipment)\n(ClinicalTrial {name})-[:trialApproves]->(Clinic)\n(Equipment)-[:imposesConstraint]->(Constraint {name,english,leanType})\n(ActionSpec {name,description})-[:REQUIRES {role: subject|operator|equipment|prerequisite}]->(*), -[:PRODUCES]->(*)\n```\n\n## How to design a pipeline\n\n1. **Query the KB** to understand what's available for the user's request. Query for the specific patient, trial, clinics, rooms, equipment, and clinicians. Do NOT call get_schema \u2014 the schema is above.\n\n2. **Resolve resources**: Find a clinic in the patient's city that the trial approves, a room with the needed equipment, and a clinician who is assigned there, holds the required qualifications, and shares a language with the patient.\n\n3. **Build a scoped pipeline plan** using nesting:\n   - **Trial scope**: The clinical trial provides the top-level context.\n   - **Clinic scope**: An approved clinic provides the clinician and shared-language evidence.\n   - **Room scope**: A room provides equipment and the clinician's equipment qualifications.\n\n4. **Describe the pipeline** in plain language with clear structure. Use indentation to show nesting. For each step, name the action and what it requires. For branching (e.g., consent yes/no, measurement pass/fail), describe both paths.\n\n## Output format\n\nProduce a structured pipeline description like this:\n\n```\nPatient: Jose\nTrial: OurTrial\n\nscope trial (OurTrial):\n  scope clinic (ValClinic, clinician=Allen, shared language=Spanish):\n    scope room (Room3, equipment=[ExamBed, BPMonitor, VO2Equipment]):\n      step consent: requires Patient, SharedLangEvidence \u2192 produces ConsentGiven\n        branch on consent:\n          refused \u2192 disqualify \u2192 NonQualifying\n          granted \u2192\n            step heartMeasurement: requires Patient, Clinician, ExamBed, ExamBedQual, SharedLangEvidence \u2192 produces HeartRate\n              branch on heart rate:\n                too fast \u2192 disqualify \u2192 NonQualifying\n                ok \u2192\n                  step bpMeasurement: requires Patient, Clinician, BPMonitor, BPMonitorQual, SharedLangEvidence \u2192 produces BloodPressure\n                  ...\n```\n\nFor each scope, list what it introduces into the context. For each step, list its requirements and outputs (these come from the ActionSpec REQUIRES/PRODUCES edges in the KB).\n\n## Important\n\n- Do NOT invent actions or constraints \u2014 only use what the KB provides.\n- If no valid configuration exists (e.g., no clinician speaks the patient's language, no approved clinic in the patient's city), say so clearly and explain why.\n- If the Proof Agent pushes back with an error, revise your plan based on their feedback. They will tell you specifically what constraint failed or what resource is missing.\n",
+          "maxIterations": 20
+        }
+      },
+      "id": "designer-agent-1",
+      "name": "Designer Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1500,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "model": "claude-haiku-4-5-20251001",
+        "options": {
+          "maxTokensToSample": 4096
+        }
+      },
+      "id": "designer-llm",
+      "name": "Designer LLM",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.2,
+      "position": [
+        1400,
+        100
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "a58asT6g6X06bWnB",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Execute a read-only Cypher query against Neo4j. Use single quotes for string literals.",
+        "method": "POST",
+        "url": "http://python-mcp:7010/neo4j/read",
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "Content-Type",
+              "valueProvider": "fieldValue",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\": \"{query}\"}",
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "query",
+              "description": "Cypher read query",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "designer-read-cypher",
+      "name": "designer_read_cypher",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const plan = $input.first().json.output;\nconst originalPrompt = $('Prep Input').first().json.originalPrompt;\nreturn [{ json: { plan, originalPrompt } }];"
+      },
+      "id": "extract-plan-1",
+      "name": "Extract Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "# Proof Agent \u2014 System Prompt\n\nYou are a Lean 4 proof agent. You receive a pipeline description from the Designer Agent and must construct a formally verified clinical pipeline using the Arrow/SheetDiagram framework. You have access to Neo4j to resolve names to concrete Lean objects, and to the Lean type checker to verify your code.\n\n## MANDATORY PROCEDURE \u2014 you MUST follow these steps IN ORDER\n\n1. **Call `read_cypher`** to query Neo4j for ALL facts about the patient, clinician, clinic, room, equipment, qualifications, trial, and languages. Do NOT skip this step. Do NOT assume any facts from the Designer's plan.\n2. **Write complete Lean 4 code** based on the Neo4j results.\n3. **Call `lean_command`** with the complete code to type-check it. Do NOT claim success without calling this tool. Your code is NOT verified until `lean_command` returns `ok: true`.\n4. **If errors**, fix the code and call `lean_command` again. Repeat until `ok: true`.\n\n**NEVER output a final answer without having called BOTH `read_cypher` AND `lean_command`.** A pipeline that has not been type-checked by `lean_command` is UNVERIFIED and MUST NOT be presented as successful.\n\n## Your tools\n\n- **lean_command**: Send complete Lean 4 code (with imports) for type checking. Returns JSON with `ok`, `result.messages`, and `result.sorries` fields. `ok: true` with no error-severity messages and empty `sorries` means success.\n- **read_cypher**: Query Neo4j to look up facts. **CRITICAL: batch your queries.** Combine all lookups into one or two Cypher queries using UNION ALL or multiple MATCH/OPTIONAL MATCH clauses. Never send individual queries for each fact.\n- **get_neo4j_schema**: Only call if you don't already have the schema in context.\n\n## Schema\n\n```\n(Human {name})-[:hasRole]->(Role), -[:speaks]->(Language {name}), -[:lives]->(City {name}), -[:assigned]->(Clinic {name}), -[:hasQualification]->(ExamBedQual|BPMonitorQual|VO2EquipmentQual)\n(Clinic)-[:isIn]->(City), -[:clinicHasRoom]->(Room {name})\n(Room)-[:roomHasExamBed]->(ExamBed), -[:roomHasBPMonitor]->(BPMonitor), -[:roomHasVO2Equip]->(VO2Equipment)\n(ClinicalTrial {name})-[:trialApproves]->(Clinic)\n(Equipment)-[:imposesConstraint]->(Constraint {name,english,leanType})\n(ActionSpec {name,description})-[:REQUIRES {role: subject|operator|equipment|prerequisite}]->(*), -[:PRODUCES]->(*)\n```\n\n## Token efficiency\n\nEach tool call adds to your conversation history and counts against rate limits. Minimize calls:\n- You MUST query Neo4j to resolve ALL facts needed for Lean code. NEVER assume facts \u2014 not from the Designer's plan, not from this prompt, not from prior knowledge. The ONLY source of truth is Neo4j. Before writing any Lean code, query for: the patient's language, city, and role; the clinician's languages, assignments, and qualifications; the clinic's rooms and equipment; the trial's approved clinics. If you skip this step your code WILL fail.\n- Gather ALL needed facts in a single batched query, e.g.: `MATCH (h:Human) WHERE h.name IN ['Jose','Allen'] OPTIONAL MATCH (h)-[:speaks]->(l) OPTIONAL MATCH (h)-[:hasRole]->(r) OPTIONAL MATCH (h)-[:assigned]->(c) OPTIONAL MATCH (h)-[:hasQualification]->(q) RETURN h.name, collect(DISTINCT l.name) as languages, collect(DISTINCT r.name) as roles, collect(DISTINCT c.name) as clinics, collect(DISTINCT labels(q)) as quals`\n- Send complete Lean code in one lean_command call, not incremental pieces.\n\n## Interpreting lean_command responses\n\n- `\"ok\": true` with `\"messages\": []` or only `\"severity\": \"info\"` messages and `\"sorries\": []` \u2192 SUCCESS. The code type-checks.\n- `\"severity\": \"error\"` messages \u2192 errors that need fixing.\n- Non-empty `\"sorries\"` \u2192 incomplete proofs that need completing.\n\n## The Lean 4 Framework\n\n### Import rules \u2014 CRITICAL\n\nUse exactly ONE import line:\n```lean\nimport WorldModel.KB.Arrow\n```\nThis transitively imports EVERYTHING: Types, Relations, Facts, Context, Spec, Arrow, Selection, SheetDiagram, Clinical, and Erase.\n\n**Do NOT use `open` statements** (e.g., `open WorldModel.KB.Types in`, `open KB.Facts in`). They cause \"unknown namespace\" errors. Just use `import WorldModel.KB.Arrow`.\n\n**Do NOT open `KB.Facts`** \u2014 define ALL entities and facts inline. Your code must be self-contained. Query Neo4j for facts, then define them with constructors.\n\n### Naming \u2014 CRITICAL: avoid collisions\n\nThe import brings in existing definitions. You MUST prefix ALL your `abbrev` and `def` names with a unique identifier derived from the patient's name to avoid collisions. For example, if the patient is \"Jose\", prefix with `jose_` or `jose`; if \"Jean\", prefix with `jean_` or `jean`.\n\n**Apply this to ALL definitions:** context abbrevs, scope extensions, arrow defs, the full context, selections, and the pipeline itself. Examples:\n- `josePatientCtx`, `joseTrialExt`, `joseClinicExt`, `joseRoomExt`\n- `joseFullCtx`, `joseAfterConsent`, `joseAfterHR`\n- `joseConsentArrow`, `joseHeartArrow`, `joseBPArrow`\n- `joseNqArrow`, `joseScopeSel`\n- `josePipeline`\n\n### Entity types (WorldModel.KB.Types)\n\n```lean\ninductive Language : String \u2192 Type where | mk : (s : String) \u2192 Language s\ninductive City : String \u2192 Type where | mk : (s : String) \u2192 City s\ninductive Clinic : String \u2192 Type where | mk : (s : String) \u2192 Clinic s\ninductive ClinicalTrial : String \u2192 Type where | mk : (s : String) \u2192 ClinicalTrial s\ninductive Room : String \u2192 Type where | mk : (s : String) \u2192 Room s\ninductive Human : String \u2192 Type where | mk : (s : String) \u2192 Human s\ninductive Role where | Patient | Administrator | Clinician\n\n-- Equipment (unit types \u2014 no parameters)\ninductive ExamBed : Type where | mk\ninductive BPMonitor : Type where | mk\ninductive VO2Equipment : Type where | mk\n\n-- Qualification types (unit types)\ninductive ExamBedQual : Type where | mk\ninductive BPMonitorQual : Type where | mk\ninductive VO2EquipmentQual : Type where | mk\n```\n\n### Relations (WorldModel.KB.Relations)\n\n```lean\ninductive hasRole {h : String} (a : Human h) (r : Role) : Type where | mk\ninductive speaks {h l : String} (a : Human h) (b : Language l) : Type where | mk\ninductive lives {h c : String} (a : Human h) (b : City c) : Type where | mk\ninductive assigned {h c : String} (a : Human h) (b : Clinic c) : Type where | mk\ninductive isIn {c t : String} (a : Clinic c) (b : City t) : Type where | mk\n\n-- Structural edges\ninductive trialApproves {t c : String} (trial : ClinicalTrial t) (clinic : Clinic c) : Type where | mk\ninductive clinicHasRoom {c r : String} (clinic : Clinic c) (room : Room r) : Type where | mk\ninductive roomHasExamBed {r : String} (room : Room r) (equip : ExamBed) : Type where | mk\ninductive roomHasBPMonitor {r : String} (room : Room r) (equip : BPMonitor) : Type where | mk\ninductive roomHasVO2Equip {r : String} (room : Room r) (equip : VO2Equipment) : Type where | mk\n\n-- Qualification holdings\ninductive holdsExamBedQual {h : String} (person : Human h) (q : ExamBedQual) : Type where | mk\ninductive holdsBPMonitorQual {h : String} (person : Human h) (q : BPMonitorQual) : Type where | mk\ninductive holdsVO2EquipmentQual {h : String} (person : Human h) (q : VO2EquipmentQual) : Type where | mk\n```\n\n### Clinical domain types (WorldModel.KB.Arrow.Clinical)\n\n```lean\ninductive Patient : String \u2192 Type where | mk : (name : String) \u2192 Patient name\ninductive Clinician : String \u2192 Type where | mk : (name : String) \u2192 Clinician name\n\ninductive HeartRate : String \u2192 Type where\n  | heartRate : {name : String} \u2192 Patient name \u2192 Int \u2192 HeartRate name\ninductive BloodPressure : String \u2192 Type where\n  | bloodPressure : {name : String} \u2192 Patient name \u2192 Rat \u2192 BloodPressure name\ninductive VO2Max : String \u2192 Type where\n  | vO2Max : {name : String} \u2192 Patient name \u2192 Int \u2192 VO2Max name\n\ninductive ProductsOutput (name : String) where\n  | products : String \u2192 Int \u2192 Rat \u2192 Int \u2192 ProductsOutput name\ninductive AssessmentResult (name : String) where\n  | success : Patient name \u2192 String \u2192 Int \u2192 Rat \u2192 Int \u2192 AssessmentResult name\n  | failure : Patient name \u2192 String \u2192 AssessmentResult name\n\ninductive ConsentGiven (name : String) : Type where\n  | mk : Patient name \u2192 String \u2192 ConsentGiven name\n\ninductive DisqualificationReason : Type where\n  | consentRefused : String \u2192 DisqualificationReason\n  | heartRateTooFast | bloodPressureTooHigh | vo2MaxTooLow\n\ninductive NonQualifying (name : String) : Type where\n  | mk : Patient name \u2192 DisqualificationReason \u2192 NonQualifying name\n\nstructure SharedLangEvidence (cn pn : String) : Type where\n  lang : String\n  cSpeaks : speaks (Human.mk cn) (Language.mk lang)\n  pSpeaks : speaks (Human.mk pn) (Language.mk lang)\n```\n\n### Context and membership (WorldModel.KB.Arrow.Context)\n\n```lean\nabbrev Ctx := List Type\n\n-- De Bruijn membership proof\ninductive Elem : Type \u2192 Ctx \u2192 Type 1 where\n  | here  : Elem \u03b1 (\u03b1 :: \u0393)\n  | there : Elem \u03b1 \u0393 \u2192 Elem \u03b1 (\u03b2 :: \u0393)\n\n-- Multiset partition\ninductive Split : Ctx \u2192 Ctx \u2192 Ctx \u2192 Type 1 where\n  | nil   : Split [] [] []\n  | left  : Split \u0393 \u0394\u2081 \u0394\u2082 \u2192 Split (\u03b1 :: \u0393) (\u03b1 :: \u0394\u2081) \u0394\u2082\n  | right : Split \u0393 \u0394\u2081 \u0394\u2082 \u2192 Split (\u03b1 :: \u0393) \u0394\u2081 (\u03b1 :: \u0394\u2082)\n\ndef Split.idLeft : (\u0393 : Ctx) \u2192 Split \u0393 \u0393 []\ndef Split.append : (\u0393\u2081 \u0393\u2082 : Ctx) \u2192 Split (\u0393\u2081 ++ \u0393\u2082) \u0393\u2081 \u0393\u2082\n```\n\n### Selection (WorldModel.KB.Arrow.Selection)\n\n```lean\n-- Additive selection (elements may be shared across branches)\ninductive Selection : Ctx \u2192 Ctx \u2192 Type 1 where\n  | nil  : Selection \u0393 []\n  | cons : Elem \u03b1 \u0393 \u2192 Selection \u0393 \u0394 \u2192 Selection \u0393 (\u03b1 :: \u0394)\n\ndef Selection.id : (\u0393 : Ctx) \u2192 Selection \u0393 \u0393\ndef Selection.prefix : (\u0393 : Ctx) \u2192 (extra : Ctx) \u2192 Selection (\u0393 ++ extra) \u0393\n```\n\n### Spec and Telescope (WorldModel.KB.Arrow.Spec)\n\n```lean\n-- Dependent list of types\ninductive Tel : Type 1 where\n  | nil  : Tel\n  | cons : (A : Type) \u2192 (A \u2192 Tel) \u2192 Tel\n\ndef Tel.ofList : Ctx \u2192 Tel   -- non-dependent telescope from flat list\n\nstructure Spec where\n  name        : String\n  description : String := \"\"\n  inputs      : Tel\n  consumes    : Ctx\n  produces    : Ctx\n```\n\n### Arrow (WorldModel.KB.Arrow.Arrow)\n\n```lean\n-- Proof that telescope types exist in context\ninductive Satisfy : Tel \u2192 Ctx \u2192 Ctx \u2192 Type 1 where\n  | nil  : Satisfy .nil \u0393 \u0393\n  | bind : (a : A) \u2192 Elem A \u0393 \u2192 Satisfy (t a) \u0393 frame \u2192 Satisfy (.cons A t) \u0393 frame\n\n-- Free symmetric monoidal category\ninductive Arrow : Ctx \u2192 Ctx \u2192 Type 1 where\n  | step : (spec : Spec) \u2192 (frame : Ctx) \u2192 Satisfy spec.inputs \u0393 frame \u2192 Arrow \u0393 (frame ++ spec.produces)\n  | seq  : Arrow \u0393 \u0394 \u2192 Arrow \u0394 \u0395 \u2192 Arrow \u0393 \u0395\n  | par  : Arrow \u0393\u2081 \u0394\u2081 \u2192 Arrow \u0393\u2082 \u0394\u2082 \u2192 Arrow (\u0393\u2081 ++ \u0393\u2082) (\u0394\u2081 ++ \u0394\u2082)\n  | id   : Arrow \u0393 \u0393\n  | swap : Arrow (\u0393\u2081 ++ \u0393\u2082) (\u0393\u2082 ++ \u0393\u2081)\n\ninfixl:50 \" \u27eb \" => Arrow.seq\ninfixl:60 \" \u2297 \" => Arrow.par\n```\n\n### SheetDiagram (WorldModel.KB.Arrow.SheetDiagram)\n\n```lean\ninductive SheetDiagram : Ctx \u2192 List Ctx \u2192 Type 1 where\n  | arrow  : Arrow \u0393 \u0394 \u2192 SheetDiagram \u0393 [\u0394]\n  | pipe   : Arrow \u0393 \u0394 \u2192 SheetDiagram \u0394 \u0395s \u2192 SheetDiagram \u0393 \u0395s\n  | branch : (split : Split \u0393 \u0393_branch \u0393_par)\n           \u2192 (sel\u2081 : Selection \u0393_branch \u0393\u2081)\n           \u2192 (sel\u2082 : Selection \u0393_branch \u0393\u2082)\n           \u2192 (left : SheetDiagram (\u0393\u2081 ++ \u0393_par) \u0394s\u2081)\n           \u2192 (right : SheetDiagram (\u0393\u2082 ++ \u0393_par) \u0394s\u2082)\n           \u2192 SheetDiagram \u0393 (\u0394s\u2081 ++ \u0394s\u2082)\n  | join   : SheetDiagram \u0393 (\u0394 :: \u0394 :: rest) \u2192 SheetDiagram \u0393 (\u0394 :: rest)\n  | halt   : SheetDiagram \u0393 []\n  | scope  : (label : String) \u2192 (ext : Ctx)\n           \u2192 SheetDiagram (ext ++ \u0393) (\u0394s.map (ext ++ \u00b7))\n           \u2192 SheetDiagram \u0393 \u0394s\n```\n\n### Erasure (WorldModel.KB.Arrow.Erase)\n\n```lean\nnamespace Erased\ninductive Pipeline where\n  | step | seq | par | branch | scope | join | halt | noop\n\ndef eraseArrow : Arrow \u0393 \u0394 \u2192 Pipeline\ndef erase : SheetDiagram \u0393 \u0394s \u2192 Pipeline\ndef Pipeline.format (p : Pipeline) (indent : Nat) : String\ninstance : ToString Pipeline\nend Erased\n```\n\n**Important:** `Erased.erase` and `Erased.Pipeline` are in the `Erased` namespace. Use the fully qualified name:\n```lean\n#eval toString (Erased.erase myPipeline)\n```\n\n## How to construct a pipeline\n\n### Step 1: Start your code\n\n```lean\nimport WorldModel.KB.Arrow\n\n-- Define ALL entities and facts inline from Neo4j queries.\n-- Your code must be self-contained \u2014 do not rely on KB.Facts names.\n```\n\n### Step 2: Define the initial context\n\n```lean\nabbrev josePatientCtx : Ctx := [Patient \"Jose\"]\n```\n\n### Step 3: Define scope extensions\n\nEach scope introduces new types into the context. The extension is prepended:\n\n```lean\nabbrev joseTrialExt : Ctx := [ClinicalTrial \"OurTrial\"]\nabbrev joseClinicExt : Ctx := [Clinic \"ValClinic\", Clinician \"Allen\",\n                            SharedLangEvidence \"Allen\" \"Jose\"]\nabbrev joseRoomExt : Ctx := [Room \"Room3\", ExamBed, BPMonitor, VO2Equipment,\n                          holdsExamBedQual allen .mk, holdsBPMonitorQual allen .mk,\n                          holdsVO2EquipmentQual allen .mk]\n```\n\nThe full context inside all scopes is `joseRoomExt ++ (joseClinicExt ++ (joseTrialExt ++ josePatientCtx))`.\n\n### Step 4: Build SharedLangEvidence\n\nYou need a concrete evidence term for the shared language. Query Neo4j to find which languages each person speaks, then find the shared one. Define all entities and facts inline using constructors:\n\n```lean\n-- Define the entities\ndef jose : Human \"Jose\" := Human.mk \"Jose\"\ndef allen : Human \"Allen\" := Human.mk \"Allen\"\n\n-- Define speaks facts from what Neo4j told you\ndef allen_speaks_spanish : speaks allen (Language.mk \"Spanish\") := speaks.mk\ndef jose_speaks_spanish : speaks jose (Language.mk \"Spanish\") := speaks.mk\n\n-- Build composite evidence\ndef joseLangEvidence : SharedLangEvidence \"Allen\" \"Jose\" :=\n  { lang := \"Spanish\"\n    cSpeaks := allen_speaks_spanish\n    pSpeaks := jose_speaks_spanish }\n```\n\n**Key insight:** Composite evidence types like `SharedLangEvidence` are NOT stored in Neo4j. You CONSTRUCT them from individual facts:\n- Query Neo4j to find that both Allen and Jose speak Spanish\n- Define the entity and relation terms inline\n- Build the `SharedLangEvidence` structure from those facts\n\nThe same applies to qualification holdings, role assignments, and other relation types \u2014 always define them inline with their constructors.\n\n### Step 5: Build Arrow steps\n\nEach step requires a `Satisfy` proof that its inputs exist in the current context. The `Satisfy` proof chains `bind` constructors, each providing a value and an `Elem` proof.\n\n**Use `(by elem_tac)` for ALL Elem proofs.** The `elem_tac` tactic automatically searches the context list to find the correct position. You NEVER need to manually count de Bruijn indices:\n\n```lean\ndef joseConsentArrow : Arrow joseFullCtx (joseFullCtx ++ [ConsentGiven \"Jose\"]) :=\n  .step\n    { name := \"consent\"\n      inputs := Tel.ofList [Patient \"Jose\", SharedLangEvidence \"Allen\" \"Jose\"]\n      consumes := []\n      produces := [ConsentGiven \"Jose\"] }\n    joseFullCtx\n    (.bind (Patient.mk \"Jose\") (by elem_tac)\n      (.bind joseLangEvidence (by elem_tac)\n        .nil))\n```\n\n**Every `Satisfy.bind` takes two arguments:** the value term, and the Elem proof. Always write `(by elem_tac)` for the Elem proof \u2014 never write `.here`, `.there .here`, etc. manually.\n\nThe `Satisfy.bind` chain does NOT consume items from the context. All Elem proofs reference the same full context `\u0393`. The tactic handles this correctly.\n\n**CRITICAL \u2014 frame and consumes rules:**\n\nThe `.step` constructor takes a `frame` argument: `Arrow.step spec frame satisfy`. The frame MUST ALWAYS equal the full input context `\u0393`. The `Satisfy.nil` terminator requires `frame = \u0393` \u2014 setting frame to anything else causes a type error.\n\n- **Always set `consumes := []`** \u2014 the framework does not support consumption at the type level. The `consumes` field is metadata only and has no effect on types.\n- **Always pass the full input context as frame** \u2014 if the arrow is `Arrow \u0393 \u0394`, pass `\u0393` as frame.\n- The output type is always `\u0393 ++ spec.produces` (frame ++ produces, and frame = \u0393).\n\nExample: a products arrow that takes HR, BP, VO2 as inputs but does NOT consume them:\n```lean\n-- afterVO2 = fullCtx ++ [ConsentGiven, HeartRate, BloodPressure, VO2Max]\ndef joseProductsArrow : Arrow joseAfterVO2 (joseAfterVO2 ++ [ProductsOutput \"Jose\"]) :=\n  .step\n    { name := \"products\"\n      inputs := Tel.ofList [HeartRate \"Jose\", BloodPressure \"Jose\", VO2Max \"Jose\"]\n      consumes := []    -- ALWAYS empty\n      produces := [ProductsOutput \"Jose\"] }\n    joseAfterVO2        -- frame = full input context, ALWAYS\n    (.bind (HeartRate.heartRate (Patient.mk \"Jose\") 72) (by elem_tac)\n      (.bind (BloodPressure.bloodPressure (Patient.mk \"Jose\") 120) (by elem_tac)\n        (.bind (VO2Max.vO2Max (Patient.mk \"Jose\") 45) (by elem_tac)\n          .nil)))       -- .nil requires frame = \u0393, which holds since frame = joseAfterVO2\n```\n\n### Step 6: Build branching with SheetDiagram\n\n**CRITICAL: Context tracking through `.pipe` and `.branch`.**\n\nAfter `.pipe someArrow`, the context changes to the OUTPUT of someArrow. If `someArrow : Arrow \u0393 \u0394`, then after `.pipe someArrow`, you are working in context `\u0394`, not `\u0393`. Every subsequent constructor (`.branch`, `.pipe`, `.arrow`) sees `\u0394`.\n\n**The disqualification branching pattern:**\n\nEach measurement step can fail, producing `NonQualifying`. The failure branches are joined together. Here is the exact pattern with type annotations:\n\n```lean\n-- Disqualification arrow: operates on fullCtx, produces NonQualifying\ndef joseNqArrow : Arrow joseFullCtx (joseFullCtx ++ [NonQualifying \"Jose\"]) := ...\n\n-- Selection for the first branch (no extra items yet):\ndef joseScopeSel : Selection joseFullCtx joseFullCtx :=\n  Selection.prefix joseFullCtx []\n\n-- Selections for later branches: drop produced items, select back to fullCtx\n-- IMPORTANT: Selection.prefix \u0393 extra has type Selection (\u0393 ++ extra) \u0393\n-- The SOURCE type is (\u0393 ++ extra), not \u0393!\ndef joseConsentFailSel : Selection joseAfterConsent joseFullCtx :=\n  Selection.prefix joseFullCtx [ConsentGiven \"Jose\"]\n\ndef joseHeartFailSel : Selection joseAfterHeart joseFullCtx :=\n  Selection.prefix joseFullCtx [ConsentGiven \"Jose\", HeartRate \"Jose\"]\n\ndef joseBPFailSel : Selection joseAfterBP joseFullCtx :=\n  Selection.prefix joseFullCtx [ConsentGiven \"Jose\", HeartRate \"Jose\", BloodPressure \"Jose\"]\n```\n\n**The nested branch-join pattern (4 branches, 3 joins):**\n\n```lean\n-- Structure: each branch point has failure (left) and success (right)\n-- All failure branches produce the SAME output: fullCtx ++ [NonQualifying]\n-- This lets .join coalesce them.\n\n.join (.join (.join\n  (.branch (Split.idLeft joseFullCtx)\n    joseScopeSel                          -- Selection joseFullCtx joseFullCtx\n    (Selection.id joseFullCtx)            -- pass: see everything\n    (.arrow joseNqArrow)                  -- fail \u2192 [fullCtx ++ [NonQualifying]]\n    (.pipe joseConsentArrow               -- pass: consent, now in afterConsent\n      (.branch (Split.idLeft joseAfterConsent)\n        joseConsentFailSel                -- Selection joseAfterConsent joseFullCtx\n        (Selection.id joseAfterConsent)   -- pass: see afterConsent\n        (.arrow joseNqArrow)              -- fail \u2192 [fullCtx ++ [NonQualifying]]\n        (.pipe joseHeartArrow             -- pass: heart, now in afterHeart\n          (.branch (Split.idLeft joseAfterHeart)\n            joseHeartFailSel              -- Selection joseAfterHeart joseFullCtx\n            (Selection.id joseAfterHeart)\n            (.arrow joseNqArrow)\n            (.pipe joseBPArrow\n              (.branch (Split.idLeft joseAfterBP)\n                joseBPFailSel             -- Selection joseAfterBP joseFullCtx\n                (Selection.id joseAfterBP)\n                (.arrow joseNqArrow)\n                (.pipe joseVO2Arrow\n                  (.pipe joseProductsArrow\n                    (.arrow joseAssessmentArrow))))))))))))\n```\n\n**Key rules:**\n1. `.branch` operates on the CURRENT context (after any preceding `.pipe`)\n2. `Split.idLeft currentCtx` \u2014 puts everything on the branch side, where `currentCtx` is the post-pipe context\n3. Failure `Selection`: `Selection.prefix joseFullCtx extraItems` has type `Selection (joseFullCtx ++ extraItems) joseFullCtx`. The type annotation must reflect this \u2014 the source is the extended context, not `joseFullCtx`.\n4. Success `Selection`: `Selection.id currentCtx` keeps everything\n5. The failure branch's `joseNqArrow` must have type `Arrow joseFullCtx (joseFullCtx ++ [NonQualifying])` \u2014 it always operates on the base scope context (after selection drops extras)\n6. ALL failure branches must produce the exact same output type so `.join` can coalesce them\n7. Each `.join` reduces `[\u0394, \u0394, ...rest]` to `[\u0394, ...rest]` \u2014 you need N-1 joins for N failure branches\n\n### Step 7: Wrap in scopes and determine output type\n\n```lean\n.scope \"trial\" joseTrialExt\n  (.scope \"clinic\" joseClinicExt\n    (.scope \"room\" joseRoomExt\n      (... inner pipeline ...)))\n```\n\n**Scope output types \u2014 CRITICAL:**\n\nThe `scope` constructor has this signature:\n```\nscope : (label : String) \u2192 (ext : Ctx)\n      \u2192 SheetDiagram (ext ++ \u0393) (\u0394s.map (ext ++ \u00b7))\n      \u2192 SheetDiagram \u0393 \u0394s\n```\n\nThis means: if you want the OUTER type to be `SheetDiagram \u0393 \u0394s`, the INNER SheetDiagram must have output contexts `\u0394s.map (ext ++ \u00b7)` \u2014 i.e., each output context in `\u0394s` with `ext` prepended.\n\n**Working from inside out:**\n\n1. The innermost pipeline (inside all 3 scopes) operates on `fullCtx = roomExt ++ clinicExt ++ trialExt ++ patientCtx` and produces outputs like:\n   - `[fullCtx ++ [NonQualifying \"Jose\"]]` (failure)\n   - `[fullCtx ++ [ConsentGiven \"Jose\", ..., AssessmentResult \"Jose\"]]` (success)\n\n2. The room scope strips `roomExt`: outputs become `clinicExt ++ trialExt ++ patientCtx ++ [...]`\n\n3. The clinic scope strips `clinicExt`: outputs become `trialExt ++ patientCtx ++ [...]`\n\n4. The trial scope strips `trialExt`: outputs become `patientCtx ++ [...]`\n\nSo the top-level type signature uses `patientCtx`-based contexts:\n```lean\ndef josePipeline : SheetDiagram josePatientCtx\n    [[Patient \"Jose\", NonQualifying \"Jose\"],\n     josePatientCtx ++ [ConsentGiven \"Jose\", HeartRate \"Jose\",\n                  BloodPressure \"Jose\", VO2Max \"Jose\",\n                  ProductsOutput \"Jose\", AssessmentResult \"Jose\"]] := ...\n```\n\n**Key rule:** The output contexts in the top-level type should NOT include scope extensions (roomExt, clinicExt, trialExt) \u2014 those are stripped by the nested scopes.\n\n### Step 8: Erase and pretty-print\n\n```lean\ndef josePipeline : SheetDiagram josePatientCtx [...] := ...\n#eval toString (Erased.erase josePipeline)\n```\n\n## KB Facts\n\nFacts live in `WorldModel.KB.Facts` under the `KB.Facts` namespace \u2014 but your generated code should NOT open or reference that namespace. Instead, define all entities and facts inline from Neo4j queries. This keeps your code self-contained.\n\nThe naming convention for your inline definitions is:\n- Entities: `jose`, `allen`, `valClinic`, `ourTrial`, etc. (lowercase camelCase)\n- Relations: `<subject>_<relation>_<object>` (e.g., `allen_speaks_spanish`, `trial_approves_val`, `room3_has_exambed`)\n- Qualifications: `<person>_holds_<type>` (e.g., `allen_holds_exambed`, `allen_holds_bpmonitor`)\n\nExample:\n```lean\ndef jose : Human \"Jose\" := Human.mk \"Jose\"\ndef allen : Human \"Allen\" := Human.mk \"Allen\"\ndef jose_speaks_spanish : speaks jose (Language.mk \"Spanish\") := speaks.mk\ndef allen_holds_exambed : holdsExamBedQual allen .mk := holdsExamBedQual.mk\n```\n\nDo NOT assume you know all the facts. Always query Neo4j to confirm what exists.\n\n## Worked example\n\nSee the `JoseExample.scopedClinicalPipeline` definition in WorldModel.KB.Arrow.Clinical for a complete 6-stage pipeline with 4 branch points, 3 joins, and 3 nested scopes. That example is namespaced under `JoseExample` to avoid collisions \u2014 your generated code should follow the same structural pattern but with your own prefixed names.\n\n## Pushing back to the Designer\n\nIf the Designer's plan cannot be formalized because:\n- A required resource doesn't exist in the KB (e.g., no clinician at a given clinic speaks the patient's language)\n- A constraint cannot be satisfied (e.g., a room lacks required equipment)\n- The pipeline structure is invalid (e.g., using an output before the step that produces it)\n\nThen respond with a clear explanation of what failed and why, so the Designer can revise the plan. Be specific: name the missing resource, the unsatisfied constraint, or the structural issue.\n\n## Output \u2014 CRITICAL formatting\n\n**When the pipeline type-checks successfully**, your response MUST contain the keyword `VERIFIED:` followed by a summary. Do NOT include any preamble, commentary, or celebration before `VERIFIED:`. The VERY FIRST characters of your response must be `VERIFIED:`.\n\nThen include:\n1. **Summary** \u2014 one paragraph explaining what was built and the key choices made\n2. **Lean code** \u2014 the complete code in a ```lean fenced block\n3. **Pipeline diagram** \u2014 the erased pretty-printed pipeline (from `#eval toString (Erased.erase ...)`)\n4. **Mermaid flowchart** \u2014 a visual diagram of the pipeline in a ```mermaid fenced block. Use a top-down flowchart showing the pipeline structure with branching. Example:\n\n````mermaid\ngraph TD\n    START([Patient]) --> CONSENT[consent]\n    CONSENT -->|refuse| DQ1[disqualify]\n    CONSENT -->|grant| HEART[heartMeasurement]\n    HEART -->|fail| DQ2[disqualify]\n    HEART -->|pass| BP[bpMeasurement]\n    BP -->|fail| DQ3[disqualify]\n    BP -->|pass| VO2[vo2Measurement]\n    VO2 -->|fail| DQ4[disqualify]\n    VO2 -->|pass| PROD[products]\n    PROD --> ASSESS[assessment]\n    DQ1 --> NQ([NonQualifying])\n    DQ2 --> NQ\n    DQ3 --> NQ\n    DQ4 --> NQ\n    ASSESS --> OK([Qualified])\n\n    style NQ fill:#f66,stroke:#333\n    style OK fill:#6f6,stroke:#333\n````\n\nYour response must start EXACTLY like this (no other text before it):\n```\nVERIFIED: Built a 6-stage clinical pipeline for Jean with 4 branch points...\n```\n\n**When pushing back to the Designer or when the pipeline fails**, the VERY FIRST characters of your response must be `FAILED:` followed by a clear explanation.\n",
+        "options": {
+          "systemMessage": "# Proof Agent \u2014 System Prompt\n\nYou are a Lean 4 proof agent. You receive a pipeline description from the Designer Agent and must construct a formally verified clinical pipeline using the Arrow/SheetDiagram framework. You have access to Neo4j to resolve names to concrete Lean objects, and to the Lean type checker to verify your code.\n\n## MANDATORY PROCEDURE \u2014 you MUST follow these steps IN ORDER\n\n1. **Call `read_cypher`** to query Neo4j for ALL facts about the patient, clinician, clinic, room, equipment, qualifications, trial, and languages. Do NOT skip this step. Do NOT assume any facts from the Designer's plan.\n2. **Write complete Lean 4 code** based on the Neo4j results.\n3. **Call `lean_command`** with the complete code to type-check it. Do NOT claim success without calling this tool. Your code is NOT verified until `lean_command` returns `ok: true`.\n4. **If errors**, fix the code and call `lean_command` again. Repeat until `ok: true`.\n\n**NEVER output a final answer without having called BOTH `read_cypher` AND `lean_command`.** A pipeline that has not been type-checked by `lean_command` is UNVERIFIED and MUST NOT be presented as successful.\n\n## Your tools\n\n- **lean_command**: Send complete Lean 4 code (with imports) for type checking. Returns JSON with `ok`, `result.messages`, and `result.sorries` fields. `ok: true` with no error-severity messages and empty `sorries` means success.\n- **read_cypher**: Query Neo4j to look up facts. **CRITICAL: batch your queries.** Combine all lookups into one or two Cypher queries using UNION ALL or multiple MATCH/OPTIONAL MATCH clauses. Never send individual queries for each fact.\n- **get_neo4j_schema**: Only call if you don't already have the schema in context.\n\n## Schema\n\n```\n(Human {name})-[:hasRole]->(Role), -[:speaks]->(Language {name}), -[:lives]->(City {name}), -[:assigned]->(Clinic {name}), -[:hasQualification]->(ExamBedQual|BPMonitorQual|VO2EquipmentQual)\n(Clinic)-[:isIn]->(City), -[:clinicHasRoom]->(Room {name})\n(Room)-[:roomHasExamBed]->(ExamBed), -[:roomHasBPMonitor]->(BPMonitor), -[:roomHasVO2Equip]->(VO2Equipment)\n(ClinicalTrial {name})-[:trialApproves]->(Clinic)\n(Equipment)-[:imposesConstraint]->(Constraint {name,english,leanType})\n(ActionSpec {name,description})-[:REQUIRES {role: subject|operator|equipment|prerequisite}]->(*), -[:PRODUCES]->(*)\n```\n\n## Token efficiency\n\nEach tool call adds to your conversation history and counts against rate limits. Minimize calls:\n- You MUST query Neo4j to resolve ALL facts needed for Lean code. NEVER assume facts \u2014 not from the Designer's plan, not from this prompt, not from prior knowledge. The ONLY source of truth is Neo4j. Before writing any Lean code, query for: the patient's language, city, and role; the clinician's languages, assignments, and qualifications; the clinic's rooms and equipment; the trial's approved clinics. If you skip this step your code WILL fail.\n- Gather ALL needed facts in a single batched query, e.g.: `MATCH (h:Human) WHERE h.name IN ['Jose','Allen'] OPTIONAL MATCH (h)-[:speaks]->(l) OPTIONAL MATCH (h)-[:hasRole]->(r) OPTIONAL MATCH (h)-[:assigned]->(c) OPTIONAL MATCH (h)-[:hasQualification]->(q) RETURN h.name, collect(DISTINCT l.name) as languages, collect(DISTINCT r.name) as roles, collect(DISTINCT c.name) as clinics, collect(DISTINCT labels(q)) as quals`\n- Send complete Lean code in one lean_command call, not incremental pieces.\n\n## Interpreting lean_command responses\n\n- `\"ok\": true` with `\"messages\": []` or only `\"severity\": \"info\"` messages and `\"sorries\": []` \u2192 SUCCESS. The code type-checks.\n- `\"severity\": \"error\"` messages \u2192 errors that need fixing.\n- Non-empty `\"sorries\"` \u2192 incomplete proofs that need completing.\n\n## The Lean 4 Framework\n\n### Import rules \u2014 CRITICAL\n\nUse exactly ONE import line:\n```lean\nimport WorldModel.KB.Arrow\n```\nThis transitively imports EVERYTHING: Types, Relations, Facts, Context, Spec, Arrow, Selection, SheetDiagram, Clinical, and Erase.\n\n**Do NOT use `open` statements** (e.g., `open WorldModel.KB.Types in`, `open KB.Facts in`). They cause \"unknown namespace\" errors. Just use `import WorldModel.KB.Arrow`.\n\n**Do NOT open `KB.Facts`** \u2014 define ALL entities and facts inline. Your code must be self-contained. Query Neo4j for facts, then define them with constructors.\n\n### Naming \u2014 CRITICAL: avoid collisions\n\nThe import brings in existing definitions. You MUST prefix ALL your `abbrev` and `def` names with a unique identifier derived from the patient's name to avoid collisions. For example, if the patient is \"Jose\", prefix with `jose_` or `jose`; if \"Jean\", prefix with `jean_` or `jean`.\n\n**Apply this to ALL definitions:** context abbrevs, scope extensions, arrow defs, the full context, selections, and the pipeline itself. Examples:\n- `josePatientCtx`, `joseTrialExt`, `joseClinicExt`, `joseRoomExt`\n- `joseFullCtx`, `joseAfterConsent`, `joseAfterHR`\n- `joseConsentArrow`, `joseHeartArrow`, `joseBPArrow`\n- `joseNqArrow`, `joseScopeSel`\n- `josePipeline`\n\n### Entity types (WorldModel.KB.Types)\n\n```lean\ninductive Language : String \u2192 Type where | mk : (s : String) \u2192 Language s\ninductive City : String \u2192 Type where | mk : (s : String) \u2192 City s\ninductive Clinic : String \u2192 Type where | mk : (s : String) \u2192 Clinic s\ninductive ClinicalTrial : String \u2192 Type where | mk : (s : String) \u2192 ClinicalTrial s\ninductive Room : String \u2192 Type where | mk : (s : String) \u2192 Room s\ninductive Human : String \u2192 Type where | mk : (s : String) \u2192 Human s\ninductive Role where | Patient | Administrator | Clinician\n\n-- Equipment (unit types \u2014 no parameters)\ninductive ExamBed : Type where | mk\ninductive BPMonitor : Type where | mk\ninductive VO2Equipment : Type where | mk\n\n-- Qualification types (unit types)\ninductive ExamBedQual : Type where | mk\ninductive BPMonitorQual : Type where | mk\ninductive VO2EquipmentQual : Type where | mk\n```\n\n### Relations (WorldModel.KB.Relations)\n\n```lean\ninductive hasRole {h : String} (a : Human h) (r : Role) : Type where | mk\ninductive speaks {h l : String} (a : Human h) (b : Language l) : Type where | mk\ninductive lives {h c : String} (a : Human h) (b : City c) : Type where | mk\ninductive assigned {h c : String} (a : Human h) (b : Clinic c) : Type where | mk\ninductive isIn {c t : String} (a : Clinic c) (b : City t) : Type where | mk\n\n-- Structural edges\ninductive trialApproves {t c : String} (trial : ClinicalTrial t) (clinic : Clinic c) : Type where | mk\ninductive clinicHasRoom {c r : String} (clinic : Clinic c) (room : Room r) : Type where | mk\ninductive roomHasExamBed {r : String} (room : Room r) (equip : ExamBed) : Type where | mk\ninductive roomHasBPMonitor {r : String} (room : Room r) (equip : BPMonitor) : Type where | mk\ninductive roomHasVO2Equip {r : String} (room : Room r) (equip : VO2Equipment) : Type where | mk\n\n-- Qualification holdings\ninductive holdsExamBedQual {h : String} (person : Human h) (q : ExamBedQual) : Type where | mk\ninductive holdsBPMonitorQual {h : String} (person : Human h) (q : BPMonitorQual) : Type where | mk\ninductive holdsVO2EquipmentQual {h : String} (person : Human h) (q : VO2EquipmentQual) : Type where | mk\n```\n\n### Clinical domain types (WorldModel.KB.Arrow.Clinical)\n\n```lean\ninductive Patient : String \u2192 Type where | mk : (name : String) \u2192 Patient name\ninductive Clinician : String \u2192 Type where | mk : (name : String) \u2192 Clinician name\n\ninductive HeartRate : String \u2192 Type where\n  | heartRate : {name : String} \u2192 Patient name \u2192 Int \u2192 HeartRate name\ninductive BloodPressure : String \u2192 Type where\n  | bloodPressure : {name : String} \u2192 Patient name \u2192 Rat \u2192 BloodPressure name\ninductive VO2Max : String \u2192 Type where\n  | vO2Max : {name : String} \u2192 Patient name \u2192 Int \u2192 VO2Max name\n\ninductive ProductsOutput (name : String) where\n  | products : String \u2192 Int \u2192 Rat \u2192 Int \u2192 ProductsOutput name\ninductive AssessmentResult (name : String) where\n  | success : Patient name \u2192 String \u2192 Int \u2192 Rat \u2192 Int \u2192 AssessmentResult name\n  | failure : Patient name \u2192 String \u2192 AssessmentResult name\n\ninductive ConsentGiven (name : String) : Type where\n  | mk : Patient name \u2192 String \u2192 ConsentGiven name\n\ninductive DisqualificationReason : Type where\n  | consentRefused : String \u2192 DisqualificationReason\n  | heartRateTooFast | bloodPressureTooHigh | vo2MaxTooLow\n\ninductive NonQualifying (name : String) : Type where\n  | mk : Patient name \u2192 DisqualificationReason \u2192 NonQualifying name\n\nstructure SharedLangEvidence (cn pn : String) : Type where\n  lang : String\n  cSpeaks : speaks (Human.mk cn) (Language.mk lang)\n  pSpeaks : speaks (Human.mk pn) (Language.mk lang)\n```\n\n### Context and membership (WorldModel.KB.Arrow.Context)\n\n```lean\nabbrev Ctx := List Type\n\n-- De Bruijn membership proof\ninductive Elem : Type \u2192 Ctx \u2192 Type 1 where\n  | here  : Elem \u03b1 (\u03b1 :: \u0393)\n  | there : Elem \u03b1 \u0393 \u2192 Elem \u03b1 (\u03b2 :: \u0393)\n\n-- Multiset partition\ninductive Split : Ctx \u2192 Ctx \u2192 Ctx \u2192 Type 1 where\n  | nil   : Split [] [] []\n  | left  : Split \u0393 \u0394\u2081 \u0394\u2082 \u2192 Split (\u03b1 :: \u0393) (\u03b1 :: \u0394\u2081) \u0394\u2082\n  | right : Split \u0393 \u0394\u2081 \u0394\u2082 \u2192 Split (\u03b1 :: \u0393) \u0394\u2081 (\u03b1 :: \u0394\u2082)\n\ndef Split.idLeft : (\u0393 : Ctx) \u2192 Split \u0393 \u0393 []\ndef Split.append : (\u0393\u2081 \u0393\u2082 : Ctx) \u2192 Split (\u0393\u2081 ++ \u0393\u2082) \u0393\u2081 \u0393\u2082\n```\n\n### Selection (WorldModel.KB.Arrow.Selection)\n\n```lean\n-- Additive selection (elements may be shared across branches)\ninductive Selection : Ctx \u2192 Ctx \u2192 Type 1 where\n  | nil  : Selection \u0393 []\n  | cons : Elem \u03b1 \u0393 \u2192 Selection \u0393 \u0394 \u2192 Selection \u0393 (\u03b1 :: \u0394)\n\ndef Selection.id : (\u0393 : Ctx) \u2192 Selection \u0393 \u0393\ndef Selection.prefix : (\u0393 : Ctx) \u2192 (extra : Ctx) \u2192 Selection (\u0393 ++ extra) \u0393\n```\n\n### Spec and Telescope (WorldModel.KB.Arrow.Spec)\n\n```lean\n-- Dependent list of types\ninductive Tel : Type 1 where\n  | nil  : Tel\n  | cons : (A : Type) \u2192 (A \u2192 Tel) \u2192 Tel\n\ndef Tel.ofList : Ctx \u2192 Tel   -- non-dependent telescope from flat list\n\nstructure Spec where\n  name        : String\n  description : String := \"\"\n  inputs      : Tel\n  consumes    : Ctx\n  produces    : Ctx\n```\n\n### Arrow (WorldModel.KB.Arrow.Arrow)\n\n```lean\n-- Proof that telescope types exist in context\ninductive Satisfy : Tel \u2192 Ctx \u2192 Ctx \u2192 Type 1 where\n  | nil  : Satisfy .nil \u0393 \u0393\n  | bind : (a : A) \u2192 Elem A \u0393 \u2192 Satisfy (t a) \u0393 frame \u2192 Satisfy (.cons A t) \u0393 frame\n\n-- Free symmetric monoidal category\ninductive Arrow : Ctx \u2192 Ctx \u2192 Type 1 where\n  | step : (spec : Spec) \u2192 (frame : Ctx) \u2192 Satisfy spec.inputs \u0393 frame \u2192 Arrow \u0393 (frame ++ spec.produces)\n  | seq  : Arrow \u0393 \u0394 \u2192 Arrow \u0394 \u0395 \u2192 Arrow \u0393 \u0395\n  | par  : Arrow \u0393\u2081 \u0394\u2081 \u2192 Arrow \u0393\u2082 \u0394\u2082 \u2192 Arrow (\u0393\u2081 ++ \u0393\u2082) (\u0394\u2081 ++ \u0394\u2082)\n  | id   : Arrow \u0393 \u0393\n  | swap : Arrow (\u0393\u2081 ++ \u0393\u2082) (\u0393\u2082 ++ \u0393\u2081)\n\ninfixl:50 \" \u27eb \" => Arrow.seq\ninfixl:60 \" \u2297 \" => Arrow.par\n```\n\n### SheetDiagram (WorldModel.KB.Arrow.SheetDiagram)\n\n```lean\ninductive SheetDiagram : Ctx \u2192 List Ctx \u2192 Type 1 where\n  | arrow  : Arrow \u0393 \u0394 \u2192 SheetDiagram \u0393 [\u0394]\n  | pipe   : Arrow \u0393 \u0394 \u2192 SheetDiagram \u0394 \u0395s \u2192 SheetDiagram \u0393 \u0395s\n  | branch : (split : Split \u0393 \u0393_branch \u0393_par)\n           \u2192 (sel\u2081 : Selection \u0393_branch \u0393\u2081)\n           \u2192 (sel\u2082 : Selection \u0393_branch \u0393\u2082)\n           \u2192 (left : SheetDiagram (\u0393\u2081 ++ \u0393_par) \u0394s\u2081)\n           \u2192 (right : SheetDiagram (\u0393\u2082 ++ \u0393_par) \u0394s\u2082)\n           \u2192 SheetDiagram \u0393 (\u0394s\u2081 ++ \u0394s\u2082)\n  | join   : SheetDiagram \u0393 (\u0394 :: \u0394 :: rest) \u2192 SheetDiagram \u0393 (\u0394 :: rest)\n  | halt   : SheetDiagram \u0393 []\n  | scope  : (label : String) \u2192 (ext : Ctx)\n           \u2192 SheetDiagram (ext ++ \u0393) (\u0394s.map (ext ++ \u00b7))\n           \u2192 SheetDiagram \u0393 \u0394s\n```\n\n### Erasure (WorldModel.KB.Arrow.Erase)\n\n```lean\nnamespace Erased\ninductive Pipeline where\n  | step | seq | par | branch | scope | join | halt | noop\n\ndef eraseArrow : Arrow \u0393 \u0394 \u2192 Pipeline\ndef erase : SheetDiagram \u0393 \u0394s \u2192 Pipeline\ndef Pipeline.format (p : Pipeline) (indent : Nat) : String\ninstance : ToString Pipeline\nend Erased\n```\n\n**Important:** `Erased.erase` and `Erased.Pipeline` are in the `Erased` namespace. Use the fully qualified name:\n```lean\n#eval toString (Erased.erase myPipeline)\n```\n\n## How to construct a pipeline\n\n### Step 1: Start your code\n\n```lean\nimport WorldModel.KB.Arrow\n\n-- Define ALL entities and facts inline from Neo4j queries.\n-- Your code must be self-contained \u2014 do not rely on KB.Facts names.\n```\n\n### Step 2: Define the initial context\n\n```lean\nabbrev josePatientCtx : Ctx := [Patient \"Jose\"]\n```\n\n### Step 3: Define scope extensions\n\nEach scope introduces new types into the context. The extension is prepended:\n\n```lean\nabbrev joseTrialExt : Ctx := [ClinicalTrial \"OurTrial\"]\nabbrev joseClinicExt : Ctx := [Clinic \"ValClinic\", Clinician \"Allen\",\n                            SharedLangEvidence \"Allen\" \"Jose\"]\nabbrev joseRoomExt : Ctx := [Room \"Room3\", ExamBed, BPMonitor, VO2Equipment,\n                          holdsExamBedQual allen .mk, holdsBPMonitorQual allen .mk,\n                          holdsVO2EquipmentQual allen .mk]\n```\n\nThe full context inside all scopes is `joseRoomExt ++ (joseClinicExt ++ (joseTrialExt ++ josePatientCtx))`.\n\n### Step 4: Build SharedLangEvidence\n\nYou need a concrete evidence term for the shared language. Query Neo4j to find which languages each person speaks, then find the shared one. Define all entities and facts inline using constructors:\n\n```lean\n-- Define the entities\ndef jose : Human \"Jose\" := Human.mk \"Jose\"\ndef allen : Human \"Allen\" := Human.mk \"Allen\"\n\n-- Define speaks facts from what Neo4j told you\ndef allen_speaks_spanish : speaks allen (Language.mk \"Spanish\") := speaks.mk\ndef jose_speaks_spanish : speaks jose (Language.mk \"Spanish\") := speaks.mk\n\n-- Build composite evidence\ndef joseLangEvidence : SharedLangEvidence \"Allen\" \"Jose\" :=\n  { lang := \"Spanish\"\n    cSpeaks := allen_speaks_spanish\n    pSpeaks := jose_speaks_spanish }\n```\n\n**Key insight:** Composite evidence types like `SharedLangEvidence` are NOT stored in Neo4j. You CONSTRUCT them from individual facts:\n- Query Neo4j to find that both Allen and Jose speak Spanish\n- Define the entity and relation terms inline\n- Build the `SharedLangEvidence` structure from those facts\n\nThe same applies to qualification holdings, role assignments, and other relation types \u2014 always define them inline with their constructors.\n\n### Step 5: Build Arrow steps\n\nEach step requires a `Satisfy` proof that its inputs exist in the current context. The `Satisfy` proof chains `bind` constructors, each providing a value and an `Elem` proof.\n\n**Use `(by elem_tac)` for ALL Elem proofs.** The `elem_tac` tactic automatically searches the context list to find the correct position. You NEVER need to manually count de Bruijn indices:\n\n```lean\ndef joseConsentArrow : Arrow joseFullCtx (joseFullCtx ++ [ConsentGiven \"Jose\"]) :=\n  .step\n    { name := \"consent\"\n      inputs := Tel.ofList [Patient \"Jose\", SharedLangEvidence \"Allen\" \"Jose\"]\n      consumes := []\n      produces := [ConsentGiven \"Jose\"] }\n    joseFullCtx\n    (.bind (Patient.mk \"Jose\") (by elem_tac)\n      (.bind joseLangEvidence (by elem_tac)\n        .nil))\n```\n\n**Every `Satisfy.bind` takes two arguments:** the value term, and the Elem proof. Always write `(by elem_tac)` for the Elem proof \u2014 never write `.here`, `.there .here`, etc. manually.\n\nThe `Satisfy.bind` chain does NOT consume items from the context. All Elem proofs reference the same full context `\u0393`. The tactic handles this correctly.\n\n**CRITICAL \u2014 frame and consumes rules:**\n\nThe `.step` constructor takes a `frame` argument: `Arrow.step spec frame satisfy`. The frame MUST ALWAYS equal the full input context `\u0393`. The `Satisfy.nil` terminator requires `frame = \u0393` \u2014 setting frame to anything else causes a type error.\n\n- **Always set `consumes := []`** \u2014 the framework does not support consumption at the type level. The `consumes` field is metadata only and has no effect on types.\n- **Always pass the full input context as frame** \u2014 if the arrow is `Arrow \u0393 \u0394`, pass `\u0393` as frame.\n- The output type is always `\u0393 ++ spec.produces` (frame ++ produces, and frame = \u0393).\n\nExample: a products arrow that takes HR, BP, VO2 as inputs but does NOT consume them:\n```lean\n-- afterVO2 = fullCtx ++ [ConsentGiven, HeartRate, BloodPressure, VO2Max]\ndef joseProductsArrow : Arrow joseAfterVO2 (joseAfterVO2 ++ [ProductsOutput \"Jose\"]) :=\n  .step\n    { name := \"products\"\n      inputs := Tel.ofList [HeartRate \"Jose\", BloodPressure \"Jose\", VO2Max \"Jose\"]\n      consumes := []    -- ALWAYS empty\n      produces := [ProductsOutput \"Jose\"] }\n    joseAfterVO2        -- frame = full input context, ALWAYS\n    (.bind (HeartRate.heartRate (Patient.mk \"Jose\") 72) (by elem_tac)\n      (.bind (BloodPressure.bloodPressure (Patient.mk \"Jose\") 120) (by elem_tac)\n        (.bind (VO2Max.vO2Max (Patient.mk \"Jose\") 45) (by elem_tac)\n          .nil)))       -- .nil requires frame = \u0393, which holds since frame = joseAfterVO2\n```\n\n### Step 6: Build branching with SheetDiagram\n\n**CRITICAL: Context tracking through `.pipe` and `.branch`.**\n\nAfter `.pipe someArrow`, the context changes to the OUTPUT of someArrow. If `someArrow : Arrow \u0393 \u0394`, then after `.pipe someArrow`, you are working in context `\u0394`, not `\u0393`. Every subsequent constructor (`.branch`, `.pipe`, `.arrow`) sees `\u0394`.\n\n**The disqualification branching pattern:**\n\nEach measurement step can fail, producing `NonQualifying`. The failure branches are joined together. Here is the exact pattern with type annotations:\n\n```lean\n-- Disqualification arrow: operates on fullCtx, produces NonQualifying\ndef joseNqArrow : Arrow joseFullCtx (joseFullCtx ++ [NonQualifying \"Jose\"]) := ...\n\n-- Selection for the first branch (no extra items yet):\ndef joseScopeSel : Selection joseFullCtx joseFullCtx :=\n  Selection.prefix joseFullCtx []\n\n-- Selections for later branches: drop produced items, select back to fullCtx\n-- IMPORTANT: Selection.prefix \u0393 extra has type Selection (\u0393 ++ extra) \u0393\n-- The SOURCE type is (\u0393 ++ extra), not \u0393!\ndef joseConsentFailSel : Selection joseAfterConsent joseFullCtx :=\n  Selection.prefix joseFullCtx [ConsentGiven \"Jose\"]\n\ndef joseHeartFailSel : Selection joseAfterHeart joseFullCtx :=\n  Selection.prefix joseFullCtx [ConsentGiven \"Jose\", HeartRate \"Jose\"]\n\ndef joseBPFailSel : Selection joseAfterBP joseFullCtx :=\n  Selection.prefix joseFullCtx [ConsentGiven \"Jose\", HeartRate \"Jose\", BloodPressure \"Jose\"]\n```\n\n**The nested branch-join pattern (4 branches, 3 joins):**\n\n```lean\n-- Structure: each branch point has failure (left) and success (right)\n-- All failure branches produce the SAME output: fullCtx ++ [NonQualifying]\n-- This lets .join coalesce them.\n\n.join (.join (.join\n  (.branch (Split.idLeft joseFullCtx)\n    joseScopeSel                          -- Selection joseFullCtx joseFullCtx\n    (Selection.id joseFullCtx)            -- pass: see everything\n    (.arrow joseNqArrow)                  -- fail \u2192 [fullCtx ++ [NonQualifying]]\n    (.pipe joseConsentArrow               -- pass: consent, now in afterConsent\n      (.branch (Split.idLeft joseAfterConsent)\n        joseConsentFailSel                -- Selection joseAfterConsent joseFullCtx\n        (Selection.id joseAfterConsent)   -- pass: see afterConsent\n        (.arrow joseNqArrow)              -- fail \u2192 [fullCtx ++ [NonQualifying]]\n        (.pipe joseHeartArrow             -- pass: heart, now in afterHeart\n          (.branch (Split.idLeft joseAfterHeart)\n            joseHeartFailSel              -- Selection joseAfterHeart joseFullCtx\n            (Selection.id joseAfterHeart)\n            (.arrow joseNqArrow)\n            (.pipe joseBPArrow\n              (.branch (Split.idLeft joseAfterBP)\n                joseBPFailSel             -- Selection joseAfterBP joseFullCtx\n                (Selection.id joseAfterBP)\n                (.arrow joseNqArrow)\n                (.pipe joseVO2Arrow\n                  (.pipe joseProductsArrow\n                    (.arrow joseAssessmentArrow))))))))))))\n```\n\n**Key rules:**\n1. `.branch` operates on the CURRENT context (after any preceding `.pipe`)\n2. `Split.idLeft currentCtx` \u2014 puts everything on the branch side, where `currentCtx` is the post-pipe context\n3. Failure `Selection`: `Selection.prefix joseFullCtx extraItems` has type `Selection (joseFullCtx ++ extraItems) joseFullCtx`. The type annotation must reflect this \u2014 the source is the extended context, not `joseFullCtx`.\n4. Success `Selection`: `Selection.id currentCtx` keeps everything\n5. The failure branch's `joseNqArrow` must have type `Arrow joseFullCtx (joseFullCtx ++ [NonQualifying])` \u2014 it always operates on the base scope context (after selection drops extras)\n6. ALL failure branches must produce the exact same output type so `.join` can coalesce them\n7. Each `.join` reduces `[\u0394, \u0394, ...rest]` to `[\u0394, ...rest]` \u2014 you need N-1 joins for N failure branches\n\n### Step 7: Wrap in scopes and determine output type\n\n```lean\n.scope \"trial\" joseTrialExt\n  (.scope \"clinic\" joseClinicExt\n    (.scope \"room\" joseRoomExt\n      (... inner pipeline ...)))\n```\n\n**Scope output types \u2014 CRITICAL:**\n\nThe `scope` constructor has this signature:\n```\nscope : (label : String) \u2192 (ext : Ctx)\n      \u2192 SheetDiagram (ext ++ \u0393) (\u0394s.map (ext ++ \u00b7))\n      \u2192 SheetDiagram \u0393 \u0394s\n```\n\nThis means: if you want the OUTER type to be `SheetDiagram \u0393 \u0394s`, the INNER SheetDiagram must have output contexts `\u0394s.map (ext ++ \u00b7)` \u2014 i.e., each output context in `\u0394s` with `ext` prepended.\n\n**Working from inside out:**\n\n1. The innermost pipeline (inside all 3 scopes) operates on `fullCtx = roomExt ++ clinicExt ++ trialExt ++ patientCtx` and produces outputs like:\n   - `[fullCtx ++ [NonQualifying \"Jose\"]]` (failure)\n   - `[fullCtx ++ [ConsentGiven \"Jose\", ..., AssessmentResult \"Jose\"]]` (success)\n\n2. The room scope strips `roomExt`: outputs become `clinicExt ++ trialExt ++ patientCtx ++ [...]`\n\n3. The clinic scope strips `clinicExt`: outputs become `trialExt ++ patientCtx ++ [...]`\n\n4. The trial scope strips `trialExt`: outputs become `patientCtx ++ [...]`\n\nSo the top-level type signature uses `patientCtx`-based contexts:\n```lean\ndef josePipeline : SheetDiagram josePatientCtx\n    [[Patient \"Jose\", NonQualifying \"Jose\"],\n     josePatientCtx ++ [ConsentGiven \"Jose\", HeartRate \"Jose\",\n                  BloodPressure \"Jose\", VO2Max \"Jose\",\n                  ProductsOutput \"Jose\", AssessmentResult \"Jose\"]] := ...\n```\n\n**Key rule:** The output contexts in the top-level type should NOT include scope extensions (roomExt, clinicExt, trialExt) \u2014 those are stripped by the nested scopes.\n\n### Step 8: Erase and pretty-print\n\n```lean\ndef josePipeline : SheetDiagram josePatientCtx [...] := ...\n#eval toString (Erased.erase josePipeline)\n```\n\n## KB Facts\n\nFacts live in `WorldModel.KB.Facts` under the `KB.Facts` namespace \u2014 but your generated code should NOT open or reference that namespace. Instead, define all entities and facts inline from Neo4j queries. This keeps your code self-contained.\n\nThe naming convention for your inline definitions is:\n- Entities: `jose`, `allen`, `valClinic`, `ourTrial`, etc. (lowercase camelCase)\n- Relations: `<subject>_<relation>_<object>` (e.g., `allen_speaks_spanish`, `trial_approves_val`, `room3_has_exambed`)\n- Qualifications: `<person>_holds_<type>` (e.g., `allen_holds_exambed`, `allen_holds_bpmonitor`)\n\nExample:\n```lean\ndef jose : Human \"Jose\" := Human.mk \"Jose\"\ndef allen : Human \"Allen\" := Human.mk \"Allen\"\ndef jose_speaks_spanish : speaks jose (Language.mk \"Spanish\") := speaks.mk\ndef allen_holds_exambed : holdsExamBedQual allen .mk := holdsExamBedQual.mk\n```\n\nDo NOT assume you know all the facts. Always query Neo4j to confirm what exists.\n\n## Worked example\n\nSee the `JoseExample.scopedClinicalPipeline` definition in WorldModel.KB.Arrow.Clinical for a complete 6-stage pipeline with 4 branch points, 3 joins, and 3 nested scopes. That example is namespaced under `JoseExample` to avoid collisions \u2014 your generated code should follow the same structural pattern but with your own prefixed names.\n\n## Pushing back to the Designer\n\nIf the Designer's plan cannot be formalized because:\n- A required resource doesn't exist in the KB (e.g., no clinician at a given clinic speaks the patient's language)\n- A constraint cannot be satisfied (e.g., a room lacks required equipment)\n- The pipeline structure is invalid (e.g., using an output before the step that produces it)\n\nThen respond with a clear explanation of what failed and why, so the Designer can revise the plan. Be specific: name the missing resource, the unsatisfied constraint, or the structural issue.\n\n## Output \u2014 CRITICAL formatting\n\n**When the pipeline type-checks successfully**, your response MUST contain the keyword `VERIFIED:` followed by a summary. Do NOT include any preamble, commentary, or celebration before `VERIFIED:`. The VERY FIRST characters of your response must be `VERIFIED:`.\n\nThen include:\n1. **Summary** \u2014 one paragraph explaining what was built and the key choices made\n2. **Lean code** \u2014 the complete code in a ```lean fenced block\n3. **Pipeline diagram** \u2014 the erased pretty-printed pipeline (from `#eval toString (Erased.erase ...)`)\n\nYour response must start EXACTLY like this (no other text before it):\n```\nVERIFIED: Built a 6-stage clinical pipeline for Jean with 4 branch points...\n```\n\n**When pushing back to the Designer or when the pipeline fails**, the VERY FIRST characters of your response must be `FAILED:` followed by a clear explanation.\n",
+          "maxIterations": 20
+        }
+      },
+      "id": "prover-agent-1",
+      "name": "Prover Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        2100,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-5-20250929",
+        "options": {
+          "maxTokensToSample": 8192
+        }
+      },
+      "id": "prover-llm",
+      "name": "Prover LLM",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.2,
+      "position": [
+        2000,
+        100
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "a58asT6g6X06bWnB",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "prover_lean_command",
+        "description": "Run Lean 4 code and check it with the kernel. Send the COMPLETE Lean 4 source code including all import lines. Returns JSON with ok and result fields.",
+        "language": "javaScript",
+        "jsCode": "const http = require('http');\nconst body = JSON.stringify({cmd: query});\nconst result = await new Promise((resolve, reject) => {\n  const req = http.request('http://python-mcp:7010/lean/command', {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },\n    timeout: 300000\n  }, res => {\n    let data = '';\n    res.on('data', chunk => data += chunk);\n    res.on('end', () => resolve(data));\n  });\n  req.on('error', e => resolve(JSON.stringify({ error: e.message })));\n  req.write(body);\n  req.end();\n});\nreturn result;"
+      },
+      "id": "prover-lean-cmd",
+      "name": "prover_lean_command",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.1,
+      "position": [
+        2140,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Execute a read-only Cypher query against Neo4j. Use single quotes for string literals.",
+        "method": "POST",
+        "url": "http://python-mcp:7010/neo4j/read",
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "Content-Type",
+              "valueProvider": "fieldValue",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\": \"{query}\"}",
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "query",
+              "description": "Cypher read query",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "prover-read-cypher",
+      "name": "prover_read_cypher",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        2280,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Get the schema of the Neo4j database including node labels, relationship types, and property keys.",
+        "method": "POST",
+        "url": "http://python-mcp:7010/neo4j/schema",
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "Content-Type",
+              "valueProvider": "fieldValue",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}"
+      },
+      "id": "prover-get-schema",
+      "name": "prover_get_schema",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        2420,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $input.first().json.output;\nconst plan = $('Extract Plan').first().json.plan;\nconst originalPrompt = $('Extract Plan').first().json.originalPrompt;\n\nconst success = output.includes('VERIFIED:');\n\nreturn [{ json: { success, proverOutput: output, plan, originalPrompt } }];"
+      },
+      "id": "parse-result-1",
+      "name": "Parse Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-success-1",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-success-1",
+      "name": "IF Prover Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2700,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $input.first().json.proverOutput;\n// Strip the VERIFIED: prefix\nconst content = output.replace(/^VERIFIED:\\s*/i, '');\nreturn [{ json: { output: content } }];"
+      },
+      "id": "format-output",
+      "name": "Format Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3000,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { proverOutput, plan, originalPrompt } = $input.first().json;\n// Strip the FEEDBACK: prefix if present\nconst feedback = proverOutput.replace(/^FEEDBACK:\\s*/i, '');\nconst designerInput = `The user originally requested:\\n${originalPrompt}\\n\\nYou previously proposed this plan:\\n${plan}\\n\\nThe Proof Agent was unable to formalize it and gave this feedback:\\n${feedback}\\n\\nPlease revise your plan to address the feedback.`;\nreturn [{ json: { designerInput, originalPrompt } }];"
+      },
+      "id": "prep-feedback",
+      "name": "Prep Feedback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3000,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.designerInput }}",
+        "options": {
+          "systemMessage": "# Designer Agent \u2014 System Prompt\n\nYou are a clinical pipeline designer. You receive a user request (e.g., \"Set up an initial meeting for Jose for the current clinical trial; if he consents, get his heart rate, blood pressure, and VO2 max\") and produce a pipeline plan that a Proof Agent will formalize in Lean 4.\n\n## Your tools\n\n- **read_cypher**: Run read-only Cypher queries against the knowledge base. **Batch your queries** \u2014 use OPTIONAL MATCH and multiple patterns to gather everything in 1-2 calls, not one query per fact.\n- **get_neo4j_schema**: Only call if the schema below has been compacted away from context.\n\n## Schema\n\n```\n(Human {name})-[:hasRole]->(Role), -[:speaks]->(Language {name}), -[:lives]->(City {name}), -[:assigned]->(Clinic {name}), -[:hasQualification]->(ExamBedQual|BPMonitorQual|VO2EquipmentQual)\n(Clinic)-[:isIn]->(City), -[:clinicHasRoom]->(Room {name})\n(Room)-[:roomHasExamBed]->(ExamBed), -[:roomHasBPMonitor]->(BPMonitor), -[:roomHasVO2Equip]->(VO2Equipment)\n(ClinicalTrial {name})-[:trialApproves]->(Clinic)\n(Equipment)-[:imposesConstraint]->(Constraint {name,english,leanType})\n(ActionSpec {name,description})-[:REQUIRES {role: subject|operator|equipment|prerequisite}]->(*), -[:PRODUCES]->(*)\n```\n\n## How to design a pipeline\n\n1. **Query the KB** to understand what's available for the user's request. Query for the specific patient, trial, clinics, rooms, equipment, and clinicians. Do NOT call get_schema \u2014 the schema is above.\n\n2. **Resolve resources**: Find a clinic in the patient's city that the trial approves, a room with the needed equipment, and a clinician who is assigned there, holds the required qualifications, and shares a language with the patient.\n\n3. **Build a scoped pipeline plan** using nesting:\n   - **Trial scope**: The clinical trial provides the top-level context.\n   - **Clinic scope**: An approved clinic provides the clinician and shared-language evidence.\n   - **Room scope**: A room provides equipment and the clinician's equipment qualifications.\n\n4. **Describe the pipeline** in plain language with clear structure. Use indentation to show nesting. For each step, name the action and what it requires. For branching (e.g., consent yes/no, measurement pass/fail), describe both paths.\n\n## Output format\n\nProduce a structured pipeline description like this:\n\n```\nPatient: Jose\nTrial: OurTrial\n\nscope trial (OurTrial):\n  scope clinic (ValClinic, clinician=Allen, shared language=Spanish):\n    scope room (Room3, equipment=[ExamBed, BPMonitor, VO2Equipment]):\n      step consent: requires Patient, SharedLangEvidence \u2192 produces ConsentGiven\n        branch on consent:\n          refused \u2192 disqualify \u2192 NonQualifying\n          granted \u2192\n            step heartMeasurement: requires Patient, Clinician, ExamBed, ExamBedQual, SharedLangEvidence \u2192 produces HeartRate\n              branch on heart rate:\n                too fast \u2192 disqualify \u2192 NonQualifying\n                ok \u2192\n                  step bpMeasurement: requires Patient, Clinician, BPMonitor, BPMonitorQual, SharedLangEvidence \u2192 produces BloodPressure\n                  ...\n```\n\nFor each scope, list what it introduces into the context. For each step, list its requirements and outputs (these come from the ActionSpec REQUIRES/PRODUCES edges in the KB).\n\n## Important\n\n- Do NOT invent actions or constraints \u2014 only use what the KB provides.\n- If no valid configuration exists (e.g., no clinician speaks the patient's language, no approved clinic in the patient's city), say so clearly and explain why.\n- If the Proof Agent pushes back with an error, revise your plan based on their feedback. They will tell you specifically what constraint failed or what resource is missing.\n",
+          "maxIterations": 20
+        }
+      },
+      "id": "designer-agent-2",
+      "name": "Designer Agent 2",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        3300,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "model": "claude-haiku-4-5-20251001",
+        "options": {
+          "maxTokensToSample": 4096
+        }
+      },
+      "id": "designer-llm-2",
+      "name": "Designer LLM 2",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.2,
+      "position": [
+        3200,
+        100
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "a58asT6g6X06bWnB",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Execute a read-only Cypher query against Neo4j. Use single quotes for string literals.",
+        "method": "POST",
+        "url": "http://python-mcp:7010/neo4j/read",
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "Content-Type",
+              "valueProvider": "fieldValue",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\": \"{query}\"}",
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "query",
+              "description": "Cypher read query",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "designer-read-cypher-2",
+      "name": "designer_read_cypher_2",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        3340,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const plan = $input.first().json.output;\nconst originalPrompt = $('Prep Feedback').first().json.originalPrompt;\nreturn [{ json: { plan, originalPrompt } }];"
+      },
+      "id": "extract-plan-2",
+      "name": "Extract Plan 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "# Proof Agent \u2014 System Prompt\n\nYou are a Lean 4 proof agent. You receive a pipeline description from the Designer Agent and must construct a formally verified clinical pipeline using the Arrow/SheetDiagram framework. You have access to Neo4j to resolve names to concrete Lean objects, and to the Lean type checker to verify your code.\n\n## MANDATORY PROCEDURE \u2014 you MUST follow these steps IN ORDER\n\n1. **Call `read_cypher`** to query Neo4j for ALL facts about the patient, clinician, clinic, room, equipment, qualifications, trial, and languages. Do NOT skip this step. Do NOT assume any facts from the Designer's plan.\n2. **Write complete Lean 4 code** based on the Neo4j results.\n3. **Call `lean_command`** with the complete code to type-check it. Do NOT claim success without calling this tool. Your code is NOT verified until `lean_command` returns `ok: true`.\n4. **If errors**, fix the code and call `lean_command` again. Repeat until `ok: true`.\n\n**NEVER output a final answer without having called BOTH `read_cypher` AND `lean_command`.** A pipeline that has not been type-checked by `lean_command` is UNVERIFIED and MUST NOT be presented as successful.\n\n## Your tools\n\n- **lean_command**: Send complete Lean 4 code (with imports) for type checking. Returns JSON with `ok`, `result.messages`, and `result.sorries` fields. `ok: true` with no error-severity messages and empty `sorries` means success.\n- **read_cypher**: Query Neo4j to look up facts. **CRITICAL: batch your queries.** Combine all lookups into one or two Cypher queries using UNION ALL or multiple MATCH/OPTIONAL MATCH clauses. Never send individual queries for each fact.\n- **get_neo4j_schema**: Only call if you don't already have the schema in context.\n\n## Schema\n\n```\n(Human {name})-[:hasRole]->(Role), -[:speaks]->(Language {name}), -[:lives]->(City {name}), -[:assigned]->(Clinic {name}), -[:hasQualification]->(ExamBedQual|BPMonitorQual|VO2EquipmentQual)\n(Clinic)-[:isIn]->(City), -[:clinicHasRoom]->(Room {name})\n(Room)-[:roomHasExamBed]->(ExamBed), -[:roomHasBPMonitor]->(BPMonitor), -[:roomHasVO2Equip]->(VO2Equipment)\n(ClinicalTrial {name})-[:trialApproves]->(Clinic)\n(Equipment)-[:imposesConstraint]->(Constraint {name,english,leanType})\n(ActionSpec {name,description})-[:REQUIRES {role: subject|operator|equipment|prerequisite}]->(*), -[:PRODUCES]->(*)\n```\n\n## Token efficiency\n\nEach tool call adds to your conversation history and counts against rate limits. Minimize calls:\n- You MUST query Neo4j to resolve ALL facts needed for Lean code. NEVER assume facts \u2014 not from the Designer's plan, not from this prompt, not from prior knowledge. The ONLY source of truth is Neo4j. Before writing any Lean code, query for: the patient's language, city, and role; the clinician's languages, assignments, and qualifications; the clinic's rooms and equipment; the trial's approved clinics. If you skip this step your code WILL fail.\n- Gather ALL needed facts in a single batched query, e.g.: `MATCH (h:Human) WHERE h.name IN ['Jose','Allen'] OPTIONAL MATCH (h)-[:speaks]->(l) OPTIONAL MATCH (h)-[:hasRole]->(r) OPTIONAL MATCH (h)-[:assigned]->(c) OPTIONAL MATCH (h)-[:hasQualification]->(q) RETURN h.name, collect(DISTINCT l.name) as languages, collect(DISTINCT r.name) as roles, collect(DISTINCT c.name) as clinics, collect(DISTINCT labels(q)) as quals`\n- Send complete Lean code in one lean_command call, not incremental pieces.\n\n## Interpreting lean_command responses\n\n- `\"ok\": true` with `\"messages\": []` or only `\"severity\": \"info\"` messages and `\"sorries\": []` \u2192 SUCCESS. The code type-checks.\n- `\"severity\": \"error\"` messages \u2192 errors that need fixing.\n- Non-empty `\"sorries\"` \u2192 incomplete proofs that need completing.\n\n## The Lean 4 Framework\n\n### Import rules \u2014 CRITICAL\n\nUse exactly ONE import line:\n```lean\nimport WorldModel.KB.Arrow\n```\nThis transitively imports EVERYTHING: Types, Relations, Facts, Context, Spec, Arrow, Selection, SheetDiagram, Clinical, and Erase.\n\n**Do NOT use `open` statements** (e.g., `open WorldModel.KB.Types in`, `open KB.Facts in`). They cause \"unknown namespace\" errors. Just use `import WorldModel.KB.Arrow`.\n\n**Do NOT open `KB.Facts`** \u2014 define ALL entities and facts inline. Your code must be self-contained. Query Neo4j for facts, then define them with constructors.\n\n### Naming \u2014 CRITICAL: avoid collisions\n\nThe import brings in existing definitions. You MUST prefix ALL your `abbrev` and `def` names with a unique identifier derived from the patient's name to avoid collisions. For example, if the patient is \"Jose\", prefix with `jose_` or `jose`; if \"Jean\", prefix with `jean_` or `jean`.\n\n**Apply this to ALL definitions:** context abbrevs, scope extensions, arrow defs, the full context, selections, and the pipeline itself. Examples:\n- `josePatientCtx`, `joseTrialExt`, `joseClinicExt`, `joseRoomExt`\n- `joseFullCtx`, `joseAfterConsent`, `joseAfterHR`\n- `joseConsentArrow`, `joseHeartArrow`, `joseBPArrow`\n- `joseNqArrow`, `joseScopeSel`\n- `josePipeline`\n\n### Entity types (WorldModel.KB.Types)\n\n```lean\ninductive Language : String \u2192 Type where | mk : (s : String) \u2192 Language s\ninductive City : String \u2192 Type where | mk : (s : String) \u2192 City s\ninductive Clinic : String \u2192 Type where | mk : (s : String) \u2192 Clinic s\ninductive ClinicalTrial : String \u2192 Type where | mk : (s : String) \u2192 ClinicalTrial s\ninductive Room : String \u2192 Type where | mk : (s : String) \u2192 Room s\ninductive Human : String \u2192 Type where | mk : (s : String) \u2192 Human s\ninductive Role where | Patient | Administrator | Clinician\n\n-- Equipment (unit types \u2014 no parameters)\ninductive ExamBed : Type where | mk\ninductive BPMonitor : Type where | mk\ninductive VO2Equipment : Type where | mk\n\n-- Qualification types (unit types)\ninductive ExamBedQual : Type where | mk\ninductive BPMonitorQual : Type where | mk\ninductive VO2EquipmentQual : Type where | mk\n```\n\n### Relations (WorldModel.KB.Relations)\n\n```lean\ninductive hasRole {h : String} (a : Human h) (r : Role) : Type where | mk\ninductive speaks {h l : String} (a : Human h) (b : Language l) : Type where | mk\ninductive lives {h c : String} (a : Human h) (b : City c) : Type where | mk\ninductive assigned {h c : String} (a : Human h) (b : Clinic c) : Type where | mk\ninductive isIn {c t : String} (a : Clinic c) (b : City t) : Type where | mk\n\n-- Structural edges\ninductive trialApproves {t c : String} (trial : ClinicalTrial t) (clinic : Clinic c) : Type where | mk\ninductive clinicHasRoom {c r : String} (clinic : Clinic c) (room : Room r) : Type where | mk\ninductive roomHasExamBed {r : String} (room : Room r) (equip : ExamBed) : Type where | mk\ninductive roomHasBPMonitor {r : String} (room : Room r) (equip : BPMonitor) : Type where | mk\ninductive roomHasVO2Equip {r : String} (room : Room r) (equip : VO2Equipment) : Type where | mk\n\n-- Qualification holdings\ninductive holdsExamBedQual {h : String} (person : Human h) (q : ExamBedQual) : Type where | mk\ninductive holdsBPMonitorQual {h : String} (person : Human h) (q : BPMonitorQual) : Type where | mk\ninductive holdsVO2EquipmentQual {h : String} (person : Human h) (q : VO2EquipmentQual) : Type where | mk\n```\n\n### Clinical domain types (WorldModel.KB.Arrow.Clinical)\n\n```lean\ninductive Patient : String \u2192 Type where | mk : (name : String) \u2192 Patient name\ninductive Clinician : String \u2192 Type where | mk : (name : String) \u2192 Clinician name\n\ninductive HeartRate : String \u2192 Type where\n  | heartRate : {name : String} \u2192 Patient name \u2192 Int \u2192 HeartRate name\ninductive BloodPressure : String \u2192 Type where\n  | bloodPressure : {name : String} \u2192 Patient name \u2192 Rat \u2192 BloodPressure name\ninductive VO2Max : String \u2192 Type where\n  | vO2Max : {name : String} \u2192 Patient name \u2192 Int \u2192 VO2Max name\n\ninductive ProductsOutput (name : String) where\n  | products : String \u2192 Int \u2192 Rat \u2192 Int \u2192 ProductsOutput name\ninductive AssessmentResult (name : String) where\n  | success : Patient name \u2192 String \u2192 Int \u2192 Rat \u2192 Int \u2192 AssessmentResult name\n  | failure : Patient name \u2192 String \u2192 AssessmentResult name\n\ninductive ConsentGiven (name : String) : Type where\n  | mk : Patient name \u2192 String \u2192 ConsentGiven name\n\ninductive DisqualificationReason : Type where\n  | consentRefused : String \u2192 DisqualificationReason\n  | heartRateTooFast | bloodPressureTooHigh | vo2MaxTooLow\n\ninductive NonQualifying (name : String) : Type where\n  | mk : Patient name \u2192 DisqualificationReason \u2192 NonQualifying name\n\nstructure SharedLangEvidence (cn pn : String) : Type where\n  lang : String\n  cSpeaks : speaks (Human.mk cn) (Language.mk lang)\n  pSpeaks : speaks (Human.mk pn) (Language.mk lang)\n```\n\n### Context and membership (WorldModel.KB.Arrow.Context)\n\n```lean\nabbrev Ctx := List Type\n\n-- De Bruijn membership proof\ninductive Elem : Type \u2192 Ctx \u2192 Type 1 where\n  | here  : Elem \u03b1 (\u03b1 :: \u0393)\n  | there : Elem \u03b1 \u0393 \u2192 Elem \u03b1 (\u03b2 :: \u0393)\n\n-- Multiset partition\ninductive Split : Ctx \u2192 Ctx \u2192 Ctx \u2192 Type 1 where\n  | nil   : Split [] [] []\n  | left  : Split \u0393 \u0394\u2081 \u0394\u2082 \u2192 Split (\u03b1 :: \u0393) (\u03b1 :: \u0394\u2081) \u0394\u2082\n  | right : Split \u0393 \u0394\u2081 \u0394\u2082 \u2192 Split (\u03b1 :: \u0393) \u0394\u2081 (\u03b1 :: \u0394\u2082)\n\ndef Split.idLeft : (\u0393 : Ctx) \u2192 Split \u0393 \u0393 []\ndef Split.append : (\u0393\u2081 \u0393\u2082 : Ctx) \u2192 Split (\u0393\u2081 ++ \u0393\u2082) \u0393\u2081 \u0393\u2082\n```\n\n### Selection (WorldModel.KB.Arrow.Selection)\n\n```lean\n-- Additive selection (elements may be shared across branches)\ninductive Selection : Ctx \u2192 Ctx \u2192 Type 1 where\n  | nil  : Selection \u0393 []\n  | cons : Elem \u03b1 \u0393 \u2192 Selection \u0393 \u0394 \u2192 Selection \u0393 (\u03b1 :: \u0394)\n\ndef Selection.id : (\u0393 : Ctx) \u2192 Selection \u0393 \u0393\ndef Selection.prefix : (\u0393 : Ctx) \u2192 (extra : Ctx) \u2192 Selection (\u0393 ++ extra) \u0393\n```\n\n### Spec and Telescope (WorldModel.KB.Arrow.Spec)\n\n```lean\n-- Dependent list of types\ninductive Tel : Type 1 where\n  | nil  : Tel\n  | cons : (A : Type) \u2192 (A \u2192 Tel) \u2192 Tel\n\ndef Tel.ofList : Ctx \u2192 Tel   -- non-dependent telescope from flat list\n\nstructure Spec where\n  name        : String\n  description : String := \"\"\n  inputs      : Tel\n  consumes    : Ctx\n  produces    : Ctx\n```\n\n### Arrow (WorldModel.KB.Arrow.Arrow)\n\n```lean\n-- Proof that telescope types exist in context\ninductive Satisfy : Tel \u2192 Ctx \u2192 Ctx \u2192 Type 1 where\n  | nil  : Satisfy .nil \u0393 \u0393\n  | bind : (a : A) \u2192 Elem A \u0393 \u2192 Satisfy (t a) \u0393 frame \u2192 Satisfy (.cons A t) \u0393 frame\n\n-- Free symmetric monoidal category\ninductive Arrow : Ctx \u2192 Ctx \u2192 Type 1 where\n  | step : (spec : Spec) \u2192 (frame : Ctx) \u2192 Satisfy spec.inputs \u0393 frame \u2192 Arrow \u0393 (frame ++ spec.produces)\n  | seq  : Arrow \u0393 \u0394 \u2192 Arrow \u0394 \u0395 \u2192 Arrow \u0393 \u0395\n  | par  : Arrow \u0393\u2081 \u0394\u2081 \u2192 Arrow \u0393\u2082 \u0394\u2082 \u2192 Arrow (\u0393\u2081 ++ \u0393\u2082) (\u0394\u2081 ++ \u0394\u2082)\n  | id   : Arrow \u0393 \u0393\n  | swap : Arrow (\u0393\u2081 ++ \u0393\u2082) (\u0393\u2082 ++ \u0393\u2081)\n\ninfixl:50 \" \u27eb \" => Arrow.seq\ninfixl:60 \" \u2297 \" => Arrow.par\n```\n\n### SheetDiagram (WorldModel.KB.Arrow.SheetDiagram)\n\n```lean\ninductive SheetDiagram : Ctx \u2192 List Ctx \u2192 Type 1 where\n  | arrow  : Arrow \u0393 \u0394 \u2192 SheetDiagram \u0393 [\u0394]\n  | pipe   : Arrow \u0393 \u0394 \u2192 SheetDiagram \u0394 \u0395s \u2192 SheetDiagram \u0393 \u0395s\n  | branch : (split : Split \u0393 \u0393_branch \u0393_par)\n           \u2192 (sel\u2081 : Selection \u0393_branch \u0393\u2081)\n           \u2192 (sel\u2082 : Selection \u0393_branch \u0393\u2082)\n           \u2192 (left : SheetDiagram (\u0393\u2081 ++ \u0393_par) \u0394s\u2081)\n           \u2192 (right : SheetDiagram (\u0393\u2082 ++ \u0393_par) \u0394s\u2082)\n           \u2192 SheetDiagram \u0393 (\u0394s\u2081 ++ \u0394s\u2082)\n  | join   : SheetDiagram \u0393 (\u0394 :: \u0394 :: rest) \u2192 SheetDiagram \u0393 (\u0394 :: rest)\n  | halt   : SheetDiagram \u0393 []\n  | scope  : (label : String) \u2192 (ext : Ctx)\n           \u2192 SheetDiagram (ext ++ \u0393) (\u0394s.map (ext ++ \u00b7))\n           \u2192 SheetDiagram \u0393 \u0394s\n```\n\n### Erasure (WorldModel.KB.Arrow.Erase)\n\n```lean\nnamespace Erased\ninductive Pipeline where\n  | step | seq | par | branch | scope | join | halt | noop\n\ndef eraseArrow : Arrow \u0393 \u0394 \u2192 Pipeline\ndef erase : SheetDiagram \u0393 \u0394s \u2192 Pipeline\ndef Pipeline.format (p : Pipeline) (indent : Nat) : String\ninstance : ToString Pipeline\nend Erased\n```\n\n**Important:** `Erased.erase` and `Erased.Pipeline` are in the `Erased` namespace. Use the fully qualified name:\n```lean\n#eval toString (Erased.erase myPipeline)\n```\n\n## How to construct a pipeline\n\n### Step 1: Start your code\n\n```lean\nimport WorldModel.KB.Arrow\n\n-- Define ALL entities and facts inline from Neo4j queries.\n-- Your code must be self-contained \u2014 do not rely on KB.Facts names.\n```\n\n### Step 2: Define the initial context\n\n```lean\nabbrev josePatientCtx : Ctx := [Patient \"Jose\"]\n```\n\n### Step 3: Define scope extensions\n\nEach scope introduces new types into the context. The extension is prepended:\n\n```lean\nabbrev joseTrialExt : Ctx := [ClinicalTrial \"OurTrial\"]\nabbrev joseClinicExt : Ctx := [Clinic \"ValClinic\", Clinician \"Allen\",\n                            SharedLangEvidence \"Allen\" \"Jose\"]\nabbrev joseRoomExt : Ctx := [Room \"Room3\", ExamBed, BPMonitor, VO2Equipment,\n                          holdsExamBedQual allen .mk, holdsBPMonitorQual allen .mk,\n                          holdsVO2EquipmentQual allen .mk]\n```\n\nThe full context inside all scopes is `joseRoomExt ++ (joseClinicExt ++ (joseTrialExt ++ josePatientCtx))`.\n\n### Step 4: Build SharedLangEvidence\n\nYou need a concrete evidence term for the shared language. Query Neo4j to find which languages each person speaks, then find the shared one. Define all entities and facts inline using constructors:\n\n```lean\n-- Define the entities\ndef jose : Human \"Jose\" := Human.mk \"Jose\"\ndef allen : Human \"Allen\" := Human.mk \"Allen\"\n\n-- Define speaks facts from what Neo4j told you\ndef allen_speaks_spanish : speaks allen (Language.mk \"Spanish\") := speaks.mk\ndef jose_speaks_spanish : speaks jose (Language.mk \"Spanish\") := speaks.mk\n\n-- Build composite evidence\ndef joseLangEvidence : SharedLangEvidence \"Allen\" \"Jose\" :=\n  { lang := \"Spanish\"\n    cSpeaks := allen_speaks_spanish\n    pSpeaks := jose_speaks_spanish }\n```\n\n**Key insight:** Composite evidence types like `SharedLangEvidence` are NOT stored in Neo4j. You CONSTRUCT them from individual facts:\n- Query Neo4j to find that both Allen and Jose speak Spanish\n- Define the entity and relation terms inline\n- Build the `SharedLangEvidence` structure from those facts\n\nThe same applies to qualification holdings, role assignments, and other relation types \u2014 always define them inline with their constructors.\n\n### Step 5: Build Arrow steps\n\nEach step requires a `Satisfy` proof that its inputs exist in the current context. The `Satisfy` proof chains `bind` constructors, each providing a value and an `Elem` proof.\n\n**Use `(by elem_tac)` for ALL Elem proofs.** The `elem_tac` tactic automatically searches the context list to find the correct position. You NEVER need to manually count de Bruijn indices:\n\n```lean\ndef joseConsentArrow : Arrow joseFullCtx (joseFullCtx ++ [ConsentGiven \"Jose\"]) :=\n  .step\n    { name := \"consent\"\n      inputs := Tel.ofList [Patient \"Jose\", SharedLangEvidence \"Allen\" \"Jose\"]\n      consumes := []\n      produces := [ConsentGiven \"Jose\"] }\n    joseFullCtx\n    (.bind (Patient.mk \"Jose\") (by elem_tac)\n      (.bind joseLangEvidence (by elem_tac)\n        .nil))\n```\n\n**Every `Satisfy.bind` takes two arguments:** the value term, and the Elem proof. Always write `(by elem_tac)` for the Elem proof \u2014 never write `.here`, `.there .here`, etc. manually.\n\nThe `Satisfy.bind` chain does NOT consume items from the context. All Elem proofs reference the same full context `\u0393`. The tactic handles this correctly.\n\n**CRITICAL \u2014 frame and consumes rules:**\n\nThe `.step` constructor takes a `frame` argument: `Arrow.step spec frame satisfy`. The frame MUST ALWAYS equal the full input context `\u0393`. The `Satisfy.nil` terminator requires `frame = \u0393` \u2014 setting frame to anything else causes a type error.\n\n- **Always set `consumes := []`** \u2014 the framework does not support consumption at the type level. The `consumes` field is metadata only and has no effect on types.\n- **Always pass the full input context as frame** \u2014 if the arrow is `Arrow \u0393 \u0394`, pass `\u0393` as frame.\n- The output type is always `\u0393 ++ spec.produces` (frame ++ produces, and frame = \u0393).\n\nExample: a products arrow that takes HR, BP, VO2 as inputs but does NOT consume them:\n```lean\n-- afterVO2 = fullCtx ++ [ConsentGiven, HeartRate, BloodPressure, VO2Max]\ndef joseProductsArrow : Arrow joseAfterVO2 (joseAfterVO2 ++ [ProductsOutput \"Jose\"]) :=\n  .step\n    { name := \"products\"\n      inputs := Tel.ofList [HeartRate \"Jose\", BloodPressure \"Jose\", VO2Max \"Jose\"]\n      consumes := []    -- ALWAYS empty\n      produces := [ProductsOutput \"Jose\"] }\n    joseAfterVO2        -- frame = full input context, ALWAYS\n    (.bind (HeartRate.heartRate (Patient.mk \"Jose\") 72) (by elem_tac)\n      (.bind (BloodPressure.bloodPressure (Patient.mk \"Jose\") 120) (by elem_tac)\n        (.bind (VO2Max.vO2Max (Patient.mk \"Jose\") 45) (by elem_tac)\n          .nil)))       -- .nil requires frame = \u0393, which holds since frame = joseAfterVO2\n```\n\n### Step 6: Build branching with SheetDiagram\n\n**CRITICAL: Context tracking through `.pipe` and `.branch`.**\n\nAfter `.pipe someArrow`, the context changes to the OUTPUT of someArrow. If `someArrow : Arrow \u0393 \u0394`, then after `.pipe someArrow`, you are working in context `\u0394`, not `\u0393`. Every subsequent constructor (`.branch`, `.pipe`, `.arrow`) sees `\u0394`.\n\n**The disqualification branching pattern:**\n\nEach measurement step can fail, producing `NonQualifying`. The failure branches are joined together. Here is the exact pattern with type annotations:\n\n```lean\n-- Disqualification arrow: operates on fullCtx, produces NonQualifying\ndef joseNqArrow : Arrow joseFullCtx (joseFullCtx ++ [NonQualifying \"Jose\"]) := ...\n\n-- Selection for the first branch (no extra items yet):\ndef joseScopeSel : Selection joseFullCtx joseFullCtx :=\n  Selection.prefix joseFullCtx []\n\n-- Selections for later branches: drop produced items, select back to fullCtx\n-- IMPORTANT: Selection.prefix \u0393 extra has type Selection (\u0393 ++ extra) \u0393\n-- The SOURCE type is (\u0393 ++ extra), not \u0393!\ndef joseConsentFailSel : Selection joseAfterConsent joseFullCtx :=\n  Selection.prefix joseFullCtx [ConsentGiven \"Jose\"]\n\ndef joseHeartFailSel : Selection joseAfterHeart joseFullCtx :=\n  Selection.prefix joseFullCtx [ConsentGiven \"Jose\", HeartRate \"Jose\"]\n\ndef joseBPFailSel : Selection joseAfterBP joseFullCtx :=\n  Selection.prefix joseFullCtx [ConsentGiven \"Jose\", HeartRate \"Jose\", BloodPressure \"Jose\"]\n```\n\n**The nested branch-join pattern (4 branches, 3 joins):**\n\n```lean\n-- Structure: each branch point has failure (left) and success (right)\n-- All failure branches produce the SAME output: fullCtx ++ [NonQualifying]\n-- This lets .join coalesce them.\n\n.join (.join (.join\n  (.branch (Split.idLeft joseFullCtx)\n    joseScopeSel                          -- Selection joseFullCtx joseFullCtx\n    (Selection.id joseFullCtx)            -- pass: see everything\n    (.arrow joseNqArrow)                  -- fail \u2192 [fullCtx ++ [NonQualifying]]\n    (.pipe joseConsentArrow               -- pass: consent, now in afterConsent\n      (.branch (Split.idLeft joseAfterConsent)\n        joseConsentFailSel                -- Selection joseAfterConsent joseFullCtx\n        (Selection.id joseAfterConsent)   -- pass: see afterConsent\n        (.arrow joseNqArrow)              -- fail \u2192 [fullCtx ++ [NonQualifying]]\n        (.pipe joseHeartArrow             -- pass: heart, now in afterHeart\n          (.branch (Split.idLeft joseAfterHeart)\n            joseHeartFailSel              -- Selection joseAfterHeart joseFullCtx\n            (Selection.id joseAfterHeart)\n            (.arrow joseNqArrow)\n            (.pipe joseBPArrow\n              (.branch (Split.idLeft joseAfterBP)\n                joseBPFailSel             -- Selection joseAfterBP joseFullCtx\n                (Selection.id joseAfterBP)\n                (.arrow joseNqArrow)\n                (.pipe joseVO2Arrow\n                  (.pipe joseProductsArrow\n                    (.arrow joseAssessmentArrow))))))))))))\n```\n\n**Key rules:**\n1. `.branch` operates on the CURRENT context (after any preceding `.pipe`)\n2. `Split.idLeft currentCtx` \u2014 puts everything on the branch side, where `currentCtx` is the post-pipe context\n3. Failure `Selection`: `Selection.prefix joseFullCtx extraItems` has type `Selection (joseFullCtx ++ extraItems) joseFullCtx`. The type annotation must reflect this \u2014 the source is the extended context, not `joseFullCtx`.\n4. Success `Selection`: `Selection.id currentCtx` keeps everything\n5. The failure branch's `joseNqArrow` must have type `Arrow joseFullCtx (joseFullCtx ++ [NonQualifying])` \u2014 it always operates on the base scope context (after selection drops extras)\n6. ALL failure branches must produce the exact same output type so `.join` can coalesce them\n7. Each `.join` reduces `[\u0394, \u0394, ...rest]` to `[\u0394, ...rest]` \u2014 you need N-1 joins for N failure branches\n\n### Step 7: Wrap in scopes and determine output type\n\n```lean\n.scope \"trial\" joseTrialExt\n  (.scope \"clinic\" joseClinicExt\n    (.scope \"room\" joseRoomExt\n      (... inner pipeline ...)))\n```\n\n**Scope output types \u2014 CRITICAL:**\n\nThe `scope` constructor has this signature:\n```\nscope : (label : String) \u2192 (ext : Ctx)\n      \u2192 SheetDiagram (ext ++ \u0393) (\u0394s.map (ext ++ \u00b7))\n      \u2192 SheetDiagram \u0393 \u0394s\n```\n\nThis means: if you want the OUTER type to be `SheetDiagram \u0393 \u0394s`, the INNER SheetDiagram must have output contexts `\u0394s.map (ext ++ \u00b7)` \u2014 i.e., each output context in `\u0394s` with `ext` prepended.\n\n**Working from inside out:**\n\n1. The innermost pipeline (inside all 3 scopes) operates on `fullCtx = roomExt ++ clinicExt ++ trialExt ++ patientCtx` and produces outputs like:\n   - `[fullCtx ++ [NonQualifying \"Jose\"]]` (failure)\n   - `[fullCtx ++ [ConsentGiven \"Jose\", ..., AssessmentResult \"Jose\"]]` (success)\n\n2. The room scope strips `roomExt`: outputs become `clinicExt ++ trialExt ++ patientCtx ++ [...]`\n\n3. The clinic scope strips `clinicExt`: outputs become `trialExt ++ patientCtx ++ [...]`\n\n4. The trial scope strips `trialExt`: outputs become `patientCtx ++ [...]`\n\nSo the top-level type signature uses `patientCtx`-based contexts:\n```lean\ndef josePipeline : SheetDiagram josePatientCtx\n    [[Patient \"Jose\", NonQualifying \"Jose\"],\n     josePatientCtx ++ [ConsentGiven \"Jose\", HeartRate \"Jose\",\n                  BloodPressure \"Jose\", VO2Max \"Jose\",\n                  ProductsOutput \"Jose\", AssessmentResult \"Jose\"]] := ...\n```\n\n**Key rule:** The output contexts in the top-level type should NOT include scope extensions (roomExt, clinicExt, trialExt) \u2014 those are stripped by the nested scopes.\n\n### Step 8: Erase and pretty-print\n\n```lean\ndef josePipeline : SheetDiagram josePatientCtx [...] := ...\n#eval toString (Erased.erase josePipeline)\n```\n\n## KB Facts\n\nFacts live in `WorldModel.KB.Facts` under the `KB.Facts` namespace \u2014 but your generated code should NOT open or reference that namespace. Instead, define all entities and facts inline from Neo4j queries. This keeps your code self-contained.\n\nThe naming convention for your inline definitions is:\n- Entities: `jose`, `allen`, `valClinic`, `ourTrial`, etc. (lowercase camelCase)\n- Relations: `<subject>_<relation>_<object>` (e.g., `allen_speaks_spanish`, `trial_approves_val`, `room3_has_exambed`)\n- Qualifications: `<person>_holds_<type>` (e.g., `allen_holds_exambed`, `allen_holds_bpmonitor`)\n\nExample:\n```lean\ndef jose : Human \"Jose\" := Human.mk \"Jose\"\ndef allen : Human \"Allen\" := Human.mk \"Allen\"\ndef jose_speaks_spanish : speaks jose (Language.mk \"Spanish\") := speaks.mk\ndef allen_holds_exambed : holdsExamBedQual allen .mk := holdsExamBedQual.mk\n```\n\nDo NOT assume you know all the facts. Always query Neo4j to confirm what exists.\n\n## Worked example\n\nSee the `JoseExample.scopedClinicalPipeline` definition in WorldModel.KB.Arrow.Clinical for a complete 6-stage pipeline with 4 branch points, 3 joins, and 3 nested scopes. That example is namespaced under `JoseExample` to avoid collisions \u2014 your generated code should follow the same structural pattern but with your own prefixed names.\n\n## Pushing back to the Designer\n\nIf the Designer's plan cannot be formalized because:\n- A required resource doesn't exist in the KB (e.g., no clinician at a given clinic speaks the patient's language)\n- A constraint cannot be satisfied (e.g., a room lacks required equipment)\n- The pipeline structure is invalid (e.g., using an output before the step that produces it)\n\nThen respond with a clear explanation of what failed and why, so the Designer can revise the plan. Be specific: name the missing resource, the unsatisfied constraint, or the structural issue.\n\n## Output \u2014 CRITICAL formatting\n\n**When the pipeline type-checks successfully**, your response MUST contain the keyword `VERIFIED:` followed by a summary. Do NOT include any preamble, commentary, or celebration before `VERIFIED:`. The VERY FIRST characters of your response must be `VERIFIED:`.\n\nThen include:\n1. **Summary** \u2014 one paragraph explaining what was built and the key choices made\n2. **Lean code** \u2014 the complete code in a ```lean fenced block\n3. **Pipeline diagram** \u2014 the erased pretty-printed pipeline (from `#eval toString (Erased.erase ...)`)\n4. **Mermaid flowchart** \u2014 a visual diagram of the pipeline in a ```mermaid fenced block. Use a top-down flowchart showing the pipeline structure with branching. Example:\n\n````mermaid\ngraph TD\n    START([Patient]) --> CONSENT[consent]\n    CONSENT -->|refuse| DQ1[disqualify]\n    CONSENT -->|grant| HEART[heartMeasurement]\n    HEART -->|fail| DQ2[disqualify]\n    HEART -->|pass| BP[bpMeasurement]\n    BP -->|fail| DQ3[disqualify]\n    BP -->|pass| VO2[vo2Measurement]\n    VO2 -->|fail| DQ4[disqualify]\n    VO2 -->|pass| PROD[products]\n    PROD --> ASSESS[assessment]\n    DQ1 --> NQ([NonQualifying])\n    DQ2 --> NQ\n    DQ3 --> NQ\n    DQ4 --> NQ\n    ASSESS --> OK([Qualified])\n\n    style NQ fill:#f66,stroke:#333\n    style OK fill:#6f6,stroke:#333\n````\n\nYour response must start EXACTLY like this (no other text before it):\n```\nVERIFIED: Built a 6-stage clinical pipeline for Jean with 4 branch points...\n```\n\n**When pushing back to the Designer or when the pipeline fails**, the VERY FIRST characters of your response must be `FAILED:` followed by a clear explanation.\n",
+        "options": {
+          "systemMessage": "# Proof Agent \u2014 System Prompt\n\nYou are a Lean 4 proof agent. You receive a pipeline description from the Designer Agent and must construct a formally verified clinical pipeline using the Arrow/SheetDiagram framework. You have access to Neo4j to resolve names to concrete Lean objects, and to the Lean type checker to verify your code.\n\n## MANDATORY PROCEDURE \u2014 you MUST follow these steps IN ORDER\n\n1. **Call `read_cypher`** to query Neo4j for ALL facts about the patient, clinician, clinic, room, equipment, qualifications, trial, and languages. Do NOT skip this step. Do NOT assume any facts from the Designer's plan.\n2. **Write complete Lean 4 code** based on the Neo4j results.\n3. **Call `lean_command`** with the complete code to type-check it. Do NOT claim success without calling this tool. Your code is NOT verified until `lean_command` returns `ok: true`.\n4. **If errors**, fix the code and call `lean_command` again. Repeat until `ok: true`.\n\n**NEVER output a final answer without having called BOTH `read_cypher` AND `lean_command`.** A pipeline that has not been type-checked by `lean_command` is UNVERIFIED and MUST NOT be presented as successful.\n\n## Your tools\n\n- **lean_command**: Send complete Lean 4 code (with imports) for type checking. Returns JSON with `ok`, `result.messages`, and `result.sorries` fields. `ok: true` with no error-severity messages and empty `sorries` means success.\n- **read_cypher**: Query Neo4j to look up facts. **CRITICAL: batch your queries.** Combine all lookups into one or two Cypher queries using UNION ALL or multiple MATCH/OPTIONAL MATCH clauses. Never send individual queries for each fact.\n- **get_neo4j_schema**: Only call if you don't already have the schema in context.\n\n## Schema\n\n```\n(Human {name})-[:hasRole]->(Role), -[:speaks]->(Language {name}), -[:lives]->(City {name}), -[:assigned]->(Clinic {name}), -[:hasQualification]->(ExamBedQual|BPMonitorQual|VO2EquipmentQual)\n(Clinic)-[:isIn]->(City), -[:clinicHasRoom]->(Room {name})\n(Room)-[:roomHasExamBed]->(ExamBed), -[:roomHasBPMonitor]->(BPMonitor), -[:roomHasVO2Equip]->(VO2Equipment)\n(ClinicalTrial {name})-[:trialApproves]->(Clinic)\n(Equipment)-[:imposesConstraint]->(Constraint {name,english,leanType})\n(ActionSpec {name,description})-[:REQUIRES {role: subject|operator|equipment|prerequisite}]->(*), -[:PRODUCES]->(*)\n```\n\n## Token efficiency\n\nEach tool call adds to your conversation history and counts against rate limits. Minimize calls:\n- You MUST query Neo4j to resolve ALL facts needed for Lean code. NEVER assume facts \u2014 not from the Designer's plan, not from this prompt, not from prior knowledge. The ONLY source of truth is Neo4j. Before writing any Lean code, query for: the patient's language, city, and role; the clinician's languages, assignments, and qualifications; the clinic's rooms and equipment; the trial's approved clinics. If you skip this step your code WILL fail.\n- Gather ALL needed facts in a single batched query, e.g.: `MATCH (h:Human) WHERE h.name IN ['Jose','Allen'] OPTIONAL MATCH (h)-[:speaks]->(l) OPTIONAL MATCH (h)-[:hasRole]->(r) OPTIONAL MATCH (h)-[:assigned]->(c) OPTIONAL MATCH (h)-[:hasQualification]->(q) RETURN h.name, collect(DISTINCT l.name) as languages, collect(DISTINCT r.name) as roles, collect(DISTINCT c.name) as clinics, collect(DISTINCT labels(q)) as quals`\n- Send complete Lean code in one lean_command call, not incremental pieces.\n\n## Interpreting lean_command responses\n\n- `\"ok\": true` with `\"messages\": []` or only `\"severity\": \"info\"` messages and `\"sorries\": []` \u2192 SUCCESS. The code type-checks.\n- `\"severity\": \"error\"` messages \u2192 errors that need fixing.\n- Non-empty `\"sorries\"` \u2192 incomplete proofs that need completing.\n\n## The Lean 4 Framework\n\n### Import rules \u2014 CRITICAL\n\nUse exactly ONE import line:\n```lean\nimport WorldModel.KB.Arrow\n```\nThis transitively imports EVERYTHING: Types, Relations, Facts, Context, Spec, Arrow, Selection, SheetDiagram, Clinical, and Erase.\n\n**Do NOT use `open` statements** (e.g., `open WorldModel.KB.Types in`, `open KB.Facts in`). They cause \"unknown namespace\" errors. Just use `import WorldModel.KB.Arrow`.\n\n**Do NOT open `KB.Facts`** \u2014 define ALL entities and facts inline. Your code must be self-contained. Query Neo4j for facts, then define them with constructors.\n\n### Naming \u2014 CRITICAL: avoid collisions\n\nThe import brings in existing definitions. You MUST prefix ALL your `abbrev` and `def` names with a unique identifier derived from the patient's name to avoid collisions. For example, if the patient is \"Jose\", prefix with `jose_` or `jose`; if \"Jean\", prefix with `jean_` or `jean`.\n\n**Apply this to ALL definitions:** context abbrevs, scope extensions, arrow defs, the full context, selections, and the pipeline itself. Examples:\n- `josePatientCtx`, `joseTrialExt`, `joseClinicExt`, `joseRoomExt`\n- `joseFullCtx`, `joseAfterConsent`, `joseAfterHR`\n- `joseConsentArrow`, `joseHeartArrow`, `joseBPArrow`\n- `joseNqArrow`, `joseScopeSel`\n- `josePipeline`\n\n### Entity types (WorldModel.KB.Types)\n\n```lean\ninductive Language : String \u2192 Type where | mk : (s : String) \u2192 Language s\ninductive City : String \u2192 Type where | mk : (s : String) \u2192 City s\ninductive Clinic : String \u2192 Type where | mk : (s : String) \u2192 Clinic s\ninductive ClinicalTrial : String \u2192 Type where | mk : (s : String) \u2192 ClinicalTrial s\ninductive Room : String \u2192 Type where | mk : (s : String) \u2192 Room s\ninductive Human : String \u2192 Type where | mk : (s : String) \u2192 Human s\ninductive Role where | Patient | Administrator | Clinician\n\n-- Equipment (unit types \u2014 no parameters)\ninductive ExamBed : Type where | mk\ninductive BPMonitor : Type where | mk\ninductive VO2Equipment : Type where | mk\n\n-- Qualification types (unit types)\ninductive ExamBedQual : Type where | mk\ninductive BPMonitorQual : Type where | mk\ninductive VO2EquipmentQual : Type where | mk\n```\n\n### Relations (WorldModel.KB.Relations)\n\n```lean\ninductive hasRole {h : String} (a : Human h) (r : Role) : Type where | mk\ninductive speaks {h l : String} (a : Human h) (b : Language l) : Type where | mk\ninductive lives {h c : String} (a : Human h) (b : City c) : Type where | mk\ninductive assigned {h c : String} (a : Human h) (b : Clinic c) : Type where | mk\ninductive isIn {c t : String} (a : Clinic c) (b : City t) : Type where | mk\n\n-- Structural edges\ninductive trialApproves {t c : String} (trial : ClinicalTrial t) (clinic : Clinic c) : Type where | mk\ninductive clinicHasRoom {c r : String} (clinic : Clinic c) (room : Room r) : Type where | mk\ninductive roomHasExamBed {r : String} (room : Room r) (equip : ExamBed) : Type where | mk\ninductive roomHasBPMonitor {r : String} (room : Room r) (equip : BPMonitor) : Type where | mk\ninductive roomHasVO2Equip {r : String} (room : Room r) (equip : VO2Equipment) : Type where | mk\n\n-- Qualification holdings\ninductive holdsExamBedQual {h : String} (person : Human h) (q : ExamBedQual) : Type where | mk\ninductive holdsBPMonitorQual {h : String} (person : Human h) (q : BPMonitorQual) : Type where | mk\ninductive holdsVO2EquipmentQual {h : String} (person : Human h) (q : VO2EquipmentQual) : Type where | mk\n```\n\n### Clinical domain types (WorldModel.KB.Arrow.Clinical)\n\n```lean\ninductive Patient : String \u2192 Type where | mk : (name : String) \u2192 Patient name\ninductive Clinician : String \u2192 Type where | mk : (name : String) \u2192 Clinician name\n\ninductive HeartRate : String \u2192 Type where\n  | heartRate : {name : String} \u2192 Patient name \u2192 Int \u2192 HeartRate name\ninductive BloodPressure : String \u2192 Type where\n  | bloodPressure : {name : String} \u2192 Patient name \u2192 Rat \u2192 BloodPressure name\ninductive VO2Max : String \u2192 Type where\n  | vO2Max : {name : String} \u2192 Patient name \u2192 Int \u2192 VO2Max name\n\ninductive ProductsOutput (name : String) where\n  | products : String \u2192 Int \u2192 Rat \u2192 Int \u2192 ProductsOutput name\ninductive AssessmentResult (name : String) where\n  | success : Patient name \u2192 String \u2192 Int \u2192 Rat \u2192 Int \u2192 AssessmentResult name\n  | failure : Patient name \u2192 String \u2192 AssessmentResult name\n\ninductive ConsentGiven (name : String) : Type where\n  | mk : Patient name \u2192 String \u2192 ConsentGiven name\n\ninductive DisqualificationReason : Type where\n  | consentRefused : String \u2192 DisqualificationReason\n  | heartRateTooFast | bloodPressureTooHigh | vo2MaxTooLow\n\ninductive NonQualifying (name : String) : Type where\n  | mk : Patient name \u2192 DisqualificationReason \u2192 NonQualifying name\n\nstructure SharedLangEvidence (cn pn : String) : Type where\n  lang : String\n  cSpeaks : speaks (Human.mk cn) (Language.mk lang)\n  pSpeaks : speaks (Human.mk pn) (Language.mk lang)\n```\n\n### Context and membership (WorldModel.KB.Arrow.Context)\n\n```lean\nabbrev Ctx := List Type\n\n-- De Bruijn membership proof\ninductive Elem : Type \u2192 Ctx \u2192 Type 1 where\n  | here  : Elem \u03b1 (\u03b1 :: \u0393)\n  | there : Elem \u03b1 \u0393 \u2192 Elem \u03b1 (\u03b2 :: \u0393)\n\n-- Multiset partition\ninductive Split : Ctx \u2192 Ctx \u2192 Ctx \u2192 Type 1 where\n  | nil   : Split [] [] []\n  | left  : Split \u0393 \u0394\u2081 \u0394\u2082 \u2192 Split (\u03b1 :: \u0393) (\u03b1 :: \u0394\u2081) \u0394\u2082\n  | right : Split \u0393 \u0394\u2081 \u0394\u2082 \u2192 Split (\u03b1 :: \u0393) \u0394\u2081 (\u03b1 :: \u0394\u2082)\n\ndef Split.idLeft : (\u0393 : Ctx) \u2192 Split \u0393 \u0393 []\ndef Split.append : (\u0393\u2081 \u0393\u2082 : Ctx) \u2192 Split (\u0393\u2081 ++ \u0393\u2082) \u0393\u2081 \u0393\u2082\n```\n\n### Selection (WorldModel.KB.Arrow.Selection)\n\n```lean\n-- Additive selection (elements may be shared across branches)\ninductive Selection : Ctx \u2192 Ctx \u2192 Type 1 where\n  | nil  : Selection \u0393 []\n  | cons : Elem \u03b1 \u0393 \u2192 Selection \u0393 \u0394 \u2192 Selection \u0393 (\u03b1 :: \u0394)\n\ndef Selection.id : (\u0393 : Ctx) \u2192 Selection \u0393 \u0393\ndef Selection.prefix : (\u0393 : Ctx) \u2192 (extra : Ctx) \u2192 Selection (\u0393 ++ extra) \u0393\n```\n\n### Spec and Telescope (WorldModel.KB.Arrow.Spec)\n\n```lean\n-- Dependent list of types\ninductive Tel : Type 1 where\n  | nil  : Tel\n  | cons : (A : Type) \u2192 (A \u2192 Tel) \u2192 Tel\n\ndef Tel.ofList : Ctx \u2192 Tel   -- non-dependent telescope from flat list\n\nstructure Spec where\n  name        : String\n  description : String := \"\"\n  inputs      : Tel\n  consumes    : Ctx\n  produces    : Ctx\n```\n\n### Arrow (WorldModel.KB.Arrow.Arrow)\n\n```lean\n-- Proof that telescope types exist in context\ninductive Satisfy : Tel \u2192 Ctx \u2192 Ctx \u2192 Type 1 where\n  | nil  : Satisfy .nil \u0393 \u0393\n  | bind : (a : A) \u2192 Elem A \u0393 \u2192 Satisfy (t a) \u0393 frame \u2192 Satisfy (.cons A t) \u0393 frame\n\n-- Free symmetric monoidal category\ninductive Arrow : Ctx \u2192 Ctx \u2192 Type 1 where\n  | step : (spec : Spec) \u2192 (frame : Ctx) \u2192 Satisfy spec.inputs \u0393 frame \u2192 Arrow \u0393 (frame ++ spec.produces)\n  | seq  : Arrow \u0393 \u0394 \u2192 Arrow \u0394 \u0395 \u2192 Arrow \u0393 \u0395\n  | par  : Arrow \u0393\u2081 \u0394\u2081 \u2192 Arrow \u0393\u2082 \u0394\u2082 \u2192 Arrow (\u0393\u2081 ++ \u0393\u2082) (\u0394\u2081 ++ \u0394\u2082)\n  | id   : Arrow \u0393 \u0393\n  | swap : Arrow (\u0393\u2081 ++ \u0393\u2082) (\u0393\u2082 ++ \u0393\u2081)\n\ninfixl:50 \" \u27eb \" => Arrow.seq\ninfixl:60 \" \u2297 \" => Arrow.par\n```\n\n### SheetDiagram (WorldModel.KB.Arrow.SheetDiagram)\n\n```lean\ninductive SheetDiagram : Ctx \u2192 List Ctx \u2192 Type 1 where\n  | arrow  : Arrow \u0393 \u0394 \u2192 SheetDiagram \u0393 [\u0394]\n  | pipe   : Arrow \u0393 \u0394 \u2192 SheetDiagram \u0394 \u0395s \u2192 SheetDiagram \u0393 \u0395s\n  | branch : (split : Split \u0393 \u0393_branch \u0393_par)\n           \u2192 (sel\u2081 : Selection \u0393_branch \u0393\u2081)\n           \u2192 (sel\u2082 : Selection \u0393_branch \u0393\u2082)\n           \u2192 (left : SheetDiagram (\u0393\u2081 ++ \u0393_par) \u0394s\u2081)\n           \u2192 (right : SheetDiagram (\u0393\u2082 ++ \u0393_par) \u0394s\u2082)\n           \u2192 SheetDiagram \u0393 (\u0394s\u2081 ++ \u0394s\u2082)\n  | join   : SheetDiagram \u0393 (\u0394 :: \u0394 :: rest) \u2192 SheetDiagram \u0393 (\u0394 :: rest)\n  | halt   : SheetDiagram \u0393 []\n  | scope  : (label : String) \u2192 (ext : Ctx)\n           \u2192 SheetDiagram (ext ++ \u0393) (\u0394s.map (ext ++ \u00b7))\n           \u2192 SheetDiagram \u0393 \u0394s\n```\n\n### Erasure (WorldModel.KB.Arrow.Erase)\n\n```lean\nnamespace Erased\ninductive Pipeline where\n  | step | seq | par | branch | scope | join | halt | noop\n\ndef eraseArrow : Arrow \u0393 \u0394 \u2192 Pipeline\ndef erase : SheetDiagram \u0393 \u0394s \u2192 Pipeline\ndef Pipeline.format (p : Pipeline) (indent : Nat) : String\ninstance : ToString Pipeline\nend Erased\n```\n\n**Important:** `Erased.erase` and `Erased.Pipeline` are in the `Erased` namespace. Use the fully qualified name:\n```lean\n#eval toString (Erased.erase myPipeline)\n```\n\n## How to construct a pipeline\n\n### Step 1: Start your code\n\n```lean\nimport WorldModel.KB.Arrow\n\n-- Define ALL entities and facts inline from Neo4j queries.\n-- Your code must be self-contained \u2014 do not rely on KB.Facts names.\n```\n\n### Step 2: Define the initial context\n\n```lean\nabbrev josePatientCtx : Ctx := [Patient \"Jose\"]\n```\n\n### Step 3: Define scope extensions\n\nEach scope introduces new types into the context. The extension is prepended:\n\n```lean\nabbrev joseTrialExt : Ctx := [ClinicalTrial \"OurTrial\"]\nabbrev joseClinicExt : Ctx := [Clinic \"ValClinic\", Clinician \"Allen\",\n                            SharedLangEvidence \"Allen\" \"Jose\"]\nabbrev joseRoomExt : Ctx := [Room \"Room3\", ExamBed, BPMonitor, VO2Equipment,\n                          holdsExamBedQual allen .mk, holdsBPMonitorQual allen .mk,\n                          holdsVO2EquipmentQual allen .mk]\n```\n\nThe full context inside all scopes is `joseRoomExt ++ (joseClinicExt ++ (joseTrialExt ++ josePatientCtx))`.\n\n### Step 4: Build SharedLangEvidence\n\nYou need a concrete evidence term for the shared language. Query Neo4j to find which languages each person speaks, then find the shared one. Define all entities and facts inline using constructors:\n\n```lean\n-- Define the entities\ndef jose : Human \"Jose\" := Human.mk \"Jose\"\ndef allen : Human \"Allen\" := Human.mk \"Allen\"\n\n-- Define speaks facts from what Neo4j told you\ndef allen_speaks_spanish : speaks allen (Language.mk \"Spanish\") := speaks.mk\ndef jose_speaks_spanish : speaks jose (Language.mk \"Spanish\") := speaks.mk\n\n-- Build composite evidence\ndef joseLangEvidence : SharedLangEvidence \"Allen\" \"Jose\" :=\n  { lang := \"Spanish\"\n    cSpeaks := allen_speaks_spanish\n    pSpeaks := jose_speaks_spanish }\n```\n\n**Key insight:** Composite evidence types like `SharedLangEvidence` are NOT stored in Neo4j. You CONSTRUCT them from individual facts:\n- Query Neo4j to find that both Allen and Jose speak Spanish\n- Define the entity and relation terms inline\n- Build the `SharedLangEvidence` structure from those facts\n\nThe same applies to qualification holdings, role assignments, and other relation types \u2014 always define them inline with their constructors.\n\n### Step 5: Build Arrow steps\n\nEach step requires a `Satisfy` proof that its inputs exist in the current context. The `Satisfy` proof chains `bind` constructors, each providing a value and an `Elem` proof.\n\n**Use `(by elem_tac)` for ALL Elem proofs.** The `elem_tac` tactic automatically searches the context list to find the correct position. You NEVER need to manually count de Bruijn indices:\n\n```lean\ndef joseConsentArrow : Arrow joseFullCtx (joseFullCtx ++ [ConsentGiven \"Jose\"]) :=\n  .step\n    { name := \"consent\"\n      inputs := Tel.ofList [Patient \"Jose\", SharedLangEvidence \"Allen\" \"Jose\"]\n      consumes := []\n      produces := [ConsentGiven \"Jose\"] }\n    joseFullCtx\n    (.bind (Patient.mk \"Jose\") (by elem_tac)\n      (.bind joseLangEvidence (by elem_tac)\n        .nil))\n```\n\n**Every `Satisfy.bind` takes two arguments:** the value term, and the Elem proof. Always write `(by elem_tac)` for the Elem proof \u2014 never write `.here`, `.there .here`, etc. manually.\n\nThe `Satisfy.bind` chain does NOT consume items from the context. All Elem proofs reference the same full context `\u0393`. The tactic handles this correctly.\n\n**CRITICAL \u2014 frame and consumes rules:**\n\nThe `.step` constructor takes a `frame` argument: `Arrow.step spec frame satisfy`. The frame MUST ALWAYS equal the full input context `\u0393`. The `Satisfy.nil` terminator requires `frame = \u0393` \u2014 setting frame to anything else causes a type error.\n\n- **Always set `consumes := []`** \u2014 the framework does not support consumption at the type level. The `consumes` field is metadata only and has no effect on types.\n- **Always pass the full input context as frame** \u2014 if the arrow is `Arrow \u0393 \u0394`, pass `\u0393` as frame.\n- The output type is always `\u0393 ++ spec.produces` (frame ++ produces, and frame = \u0393).\n\nExample: a products arrow that takes HR, BP, VO2 as inputs but does NOT consume them:\n```lean\n-- afterVO2 = fullCtx ++ [ConsentGiven, HeartRate, BloodPressure, VO2Max]\ndef joseProductsArrow : Arrow joseAfterVO2 (joseAfterVO2 ++ [ProductsOutput \"Jose\"]) :=\n  .step\n    { name := \"products\"\n      inputs := Tel.ofList [HeartRate \"Jose\", BloodPressure \"Jose\", VO2Max \"Jose\"]\n      consumes := []    -- ALWAYS empty\n      produces := [ProductsOutput \"Jose\"] }\n    joseAfterVO2        -- frame = full input context, ALWAYS\n    (.bind (HeartRate.heartRate (Patient.mk \"Jose\") 72) (by elem_tac)\n      (.bind (BloodPressure.bloodPressure (Patient.mk \"Jose\") 120) (by elem_tac)\n        (.bind (VO2Max.vO2Max (Patient.mk \"Jose\") 45) (by elem_tac)\n          .nil)))       -- .nil requires frame = \u0393, which holds since frame = joseAfterVO2\n```\n\n### Step 6: Build branching with SheetDiagram\n\n**CRITICAL: Context tracking through `.pipe` and `.branch`.**\n\nAfter `.pipe someArrow`, the context changes to the OUTPUT of someArrow. If `someArrow : Arrow \u0393 \u0394`, then after `.pipe someArrow`, you are working in context `\u0394`, not `\u0393`. Every subsequent constructor (`.branch`, `.pipe`, `.arrow`) sees `\u0394`.\n\n**The disqualification branching pattern:**\n\nEach measurement step can fail, producing `NonQualifying`. The failure branches are joined together. Here is the exact pattern with type annotations:\n\n```lean\n-- Disqualification arrow: operates on fullCtx, produces NonQualifying\ndef joseNqArrow : Arrow joseFullCtx (joseFullCtx ++ [NonQualifying \"Jose\"]) := ...\n\n-- Selection for the first branch (no extra items yet):\ndef joseScopeSel : Selection joseFullCtx joseFullCtx :=\n  Selection.prefix joseFullCtx []\n\n-- Selections for later branches: drop produced items, select back to fullCtx\n-- IMPORTANT: Selection.prefix \u0393 extra has type Selection (\u0393 ++ extra) \u0393\n-- The SOURCE type is (\u0393 ++ extra), not \u0393!\ndef joseConsentFailSel : Selection joseAfterConsent joseFullCtx :=\n  Selection.prefix joseFullCtx [ConsentGiven \"Jose\"]\n\ndef joseHeartFailSel : Selection joseAfterHeart joseFullCtx :=\n  Selection.prefix joseFullCtx [ConsentGiven \"Jose\", HeartRate \"Jose\"]\n\ndef joseBPFailSel : Selection joseAfterBP joseFullCtx :=\n  Selection.prefix joseFullCtx [ConsentGiven \"Jose\", HeartRate \"Jose\", BloodPressure \"Jose\"]\n```\n\n**The nested branch-join pattern (4 branches, 3 joins):**\n\n```lean\n-- Structure: each branch point has failure (left) and success (right)\n-- All failure branches produce the SAME output: fullCtx ++ [NonQualifying]\n-- This lets .join coalesce them.\n\n.join (.join (.join\n  (.branch (Split.idLeft joseFullCtx)\n    joseScopeSel                          -- Selection joseFullCtx joseFullCtx\n    (Selection.id joseFullCtx)            -- pass: see everything\n    (.arrow joseNqArrow)                  -- fail \u2192 [fullCtx ++ [NonQualifying]]\n    (.pipe joseConsentArrow               -- pass: consent, now in afterConsent\n      (.branch (Split.idLeft joseAfterConsent)\n        joseConsentFailSel                -- Selection joseAfterConsent joseFullCtx\n        (Selection.id joseAfterConsent)   -- pass: see afterConsent\n        (.arrow joseNqArrow)              -- fail \u2192 [fullCtx ++ [NonQualifying]]\n        (.pipe joseHeartArrow             -- pass: heart, now in afterHeart\n          (.branch (Split.idLeft joseAfterHeart)\n            joseHeartFailSel              -- Selection joseAfterHeart joseFullCtx\n            (Selection.id joseAfterHeart)\n            (.arrow joseNqArrow)\n            (.pipe joseBPArrow\n              (.branch (Split.idLeft joseAfterBP)\n                joseBPFailSel             -- Selection joseAfterBP joseFullCtx\n                (Selection.id joseAfterBP)\n                (.arrow joseNqArrow)\n                (.pipe joseVO2Arrow\n                  (.pipe joseProductsArrow\n                    (.arrow joseAssessmentArrow))))))))))))\n```\n\n**Key rules:**\n1. `.branch` operates on the CURRENT context (after any preceding `.pipe`)\n2. `Split.idLeft currentCtx` \u2014 puts everything on the branch side, where `currentCtx` is the post-pipe context\n3. Failure `Selection`: `Selection.prefix joseFullCtx extraItems` has type `Selection (joseFullCtx ++ extraItems) joseFullCtx`. The type annotation must reflect this \u2014 the source is the extended context, not `joseFullCtx`.\n4. Success `Selection`: `Selection.id currentCtx` keeps everything\n5. The failure branch's `joseNqArrow` must have type `Arrow joseFullCtx (joseFullCtx ++ [NonQualifying])` \u2014 it always operates on the base scope context (after selection drops extras)\n6. ALL failure branches must produce the exact same output type so `.join` can coalesce them\n7. Each `.join` reduces `[\u0394, \u0394, ...rest]` to `[\u0394, ...rest]` \u2014 you need N-1 joins for N failure branches\n\n### Step 7: Wrap in scopes and determine output type\n\n```lean\n.scope \"trial\" joseTrialExt\n  (.scope \"clinic\" joseClinicExt\n    (.scope \"room\" joseRoomExt\n      (... inner pipeline ...)))\n```\n\n**Scope output types \u2014 CRITICAL:**\n\nThe `scope` constructor has this signature:\n```\nscope : (label : String) \u2192 (ext : Ctx)\n      \u2192 SheetDiagram (ext ++ \u0393) (\u0394s.map (ext ++ \u00b7))\n      \u2192 SheetDiagram \u0393 \u0394s\n```\n\nThis means: if you want the OUTER type to be `SheetDiagram \u0393 \u0394s`, the INNER SheetDiagram must have output contexts `\u0394s.map (ext ++ \u00b7)` \u2014 i.e., each output context in `\u0394s` with `ext` prepended.\n\n**Working from inside out:**\n\n1. The innermost pipeline (inside all 3 scopes) operates on `fullCtx = roomExt ++ clinicExt ++ trialExt ++ patientCtx` and produces outputs like:\n   - `[fullCtx ++ [NonQualifying \"Jose\"]]` (failure)\n   - `[fullCtx ++ [ConsentGiven \"Jose\", ..., AssessmentResult \"Jose\"]]` (success)\n\n2. The room scope strips `roomExt`: outputs become `clinicExt ++ trialExt ++ patientCtx ++ [...]`\n\n3. The clinic scope strips `clinicExt`: outputs become `trialExt ++ patientCtx ++ [...]`\n\n4. The trial scope strips `trialExt`: outputs become `patientCtx ++ [...]`\n\nSo the top-level type signature uses `patientCtx`-based contexts:\n```lean\ndef josePipeline : SheetDiagram josePatientCtx\n    [[Patient \"Jose\", NonQualifying \"Jose\"],\n     josePatientCtx ++ [ConsentGiven \"Jose\", HeartRate \"Jose\",\n                  BloodPressure \"Jose\", VO2Max \"Jose\",\n                  ProductsOutput \"Jose\", AssessmentResult \"Jose\"]] := ...\n```\n\n**Key rule:** The output contexts in the top-level type should NOT include scope extensions (roomExt, clinicExt, trialExt) \u2014 those are stripped by the nested scopes.\n\n### Step 8: Erase and pretty-print\n\n```lean\ndef josePipeline : SheetDiagram josePatientCtx [...] := ...\n#eval toString (Erased.erase josePipeline)\n```\n\n## KB Facts\n\nFacts live in `WorldModel.KB.Facts` under the `KB.Facts` namespace \u2014 but your generated code should NOT open or reference that namespace. Instead, define all entities and facts inline from Neo4j queries. This keeps your code self-contained.\n\nThe naming convention for your inline definitions is:\n- Entities: `jose`, `allen`, `valClinic`, `ourTrial`, etc. (lowercase camelCase)\n- Relations: `<subject>_<relation>_<object>` (e.g., `allen_speaks_spanish`, `trial_approves_val`, `room3_has_exambed`)\n- Qualifications: `<person>_holds_<type>` (e.g., `allen_holds_exambed`, `allen_holds_bpmonitor`)\n\nExample:\n```lean\ndef jose : Human \"Jose\" := Human.mk \"Jose\"\ndef allen : Human \"Allen\" := Human.mk \"Allen\"\ndef jose_speaks_spanish : speaks jose (Language.mk \"Spanish\") := speaks.mk\ndef allen_holds_exambed : holdsExamBedQual allen .mk := holdsExamBedQual.mk\n```\n\nDo NOT assume you know all the facts. Always query Neo4j to confirm what exists.\n\n## Worked example\n\nSee the `JoseExample.scopedClinicalPipeline` definition in WorldModel.KB.Arrow.Clinical for a complete 6-stage pipeline with 4 branch points, 3 joins, and 3 nested scopes. That example is namespaced under `JoseExample` to avoid collisions \u2014 your generated code should follow the same structural pattern but with your own prefixed names.\n\n## Pushing back to the Designer\n\nIf the Designer's plan cannot be formalized because:\n- A required resource doesn't exist in the KB (e.g., no clinician at a given clinic speaks the patient's language)\n- A constraint cannot be satisfied (e.g., a room lacks required equipment)\n- The pipeline structure is invalid (e.g., using an output before the step that produces it)\n\nThen respond with a clear explanation of what failed and why, so the Designer can revise the plan. Be specific: name the missing resource, the unsatisfied constraint, or the structural issue.\n\n## Output \u2014 CRITICAL formatting\n\n**When the pipeline type-checks successfully**, your response MUST contain the keyword `VERIFIED:` followed by a summary. Do NOT include any preamble, commentary, or celebration before `VERIFIED:`. The VERY FIRST characters of your response must be `VERIFIED:`.\n\nThen include:\n1. **Summary** \u2014 one paragraph explaining what was built and the key choices made\n2. **Lean code** \u2014 the complete code in a ```lean fenced block\n3. **Pipeline diagram** \u2014 the erased pretty-printed pipeline (from `#eval toString (Erased.erase ...)`)\n\nYour response must start EXACTLY like this (no other text before it):\n```\nVERIFIED: Built a 6-stage clinical pipeline for Jean with 4 branch points...\n```\n\n**When pushing back to the Designer or when the pipeline fails**, the VERY FIRST characters of your response must be `FAILED:` followed by a clear explanation.\n",
+          "maxIterations": 20
+        }
+      },
+      "id": "prover-agent-2",
+      "name": "Prover Agent 2",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        3900,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-5-20250929",
+        "options": {
+          "maxTokensToSample": 8192
+        }
+      },
+      "id": "prover-llm-2",
+      "name": "Prover LLM 2",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.2,
+      "position": [
+        3800,
+        100
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "a58asT6g6X06bWnB",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "prover_lean_command_2",
+        "description": "Run Lean 4 code and check it with the kernel. Send the COMPLETE Lean 4 source code including all import lines. Returns JSON with ok and result fields.",
+        "language": "javaScript",
+        "jsCode": "const http = require('http');\nconst body = JSON.stringify({cmd: query});\nconst result = await new Promise((resolve, reject) => {\n  const req = http.request('http://python-mcp:7010/lean/command', {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },\n    timeout: 300000\n  }, res => {\n    let data = '';\n    res.on('data', chunk => data += chunk);\n    res.on('end', () => resolve(data));\n  });\n  req.on('error', e => resolve(JSON.stringify({ error: e.message })));\n  req.write(body);\n  req.end();\n});\nreturn result;"
+      },
+      "id": "prover-lean-cmd-2",
+      "name": "prover_lean_command_2",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.1,
+      "position": [
+        3940,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Execute a read-only Cypher query against Neo4j. Use single quotes for string literals.",
+        "method": "POST",
+        "url": "http://python-mcp:7010/neo4j/read",
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "Content-Type",
+              "valueProvider": "fieldValue",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\": \"{query}\"}",
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "query",
+              "description": "Cypher read query",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "prover-read-cypher-2",
+      "name": "prover_read_cypher_2",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        4080,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Get the schema of the Neo4j database including node labels, relationship types, and property keys.",
+        "method": "POST",
+        "url": "http://python-mcp:7010/neo4j/schema",
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "Content-Type",
+              "valueProvider": "fieldValue",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}"
+      },
+      "id": "prover-get-schema-2",
+      "name": "prover_get_schema_2",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        4220,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $input.first().json.output;\nconst success = output.includes('VERIFIED:');\nreturn [{ json: { success, proverOutput: output } }];"
+      },
+      "id": "parse-result-2",
+      "name": "Parse Result 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4200,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-success-2",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-success-2",
+      "name": "IF Prover 2 Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4500,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $input.first().json.proverOutput;\nconst content = output.replace(/^VERIFIED:\\s*/i, '');\nreturn [{ json: { output: content } }];"
+      },
+      "id": "format-output-2",
+      "name": "Format Output 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4800,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $input.first().json.proverOutput;\nconst feedback = output.replace(/^FEEDBACK:\\s*/i, '');\nreturn [{ json: { output: 'Pipeline construction failed after 2 attempts. Last feedback:\\n\\n' + feedback } }];"
+      },
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4800,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "options": {
+          "systemMessage": "You are a database query agent with access to a Neo4j graph database containing clinical trial data. Use get_neo4j_schema to inspect the database structure before querying, then use read_cypher to answer the user's question. Be concise and informative.",
+          "maxIterations": 10
+        }
+      },
+      "id": "query-agent",
+      "name": "Query Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "claude-haiku-4-5-20251001",
+        "options": {
+          "maxTokensToSample": 1024
+        }
+      },
+      "id": "query-llm",
+      "name": "Query LLM",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.2,
+      "position": [
+        1100,
+        500
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "a58asT6g6X06bWnB",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Execute a read-only Cypher query against Neo4j. Use single quotes for string literals.",
+        "method": "POST",
+        "url": "http://python-mcp:7010/neo4j/read",
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "Content-Type",
+              "valueProvider": "fieldValue",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"query\": \"{query}\"}",
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "query",
+              "description": "Cypher read query",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "query-read-cypher",
+      "name": "query_read_cypher",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Get the schema of the Neo4j database including node labels, relationship types, and property keys.",
+        "method": "POST",
+        "url": "http://python-mcp:7010/neo4j/schema",
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "Content-Type",
+              "valueProvider": "fieldValue",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}"
+      },
+      "id": "designer-get-schema",
+      "name": "designer_get_schema",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1680,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Get the schema of the Neo4j database including node labels, relationship types, and property keys.",
+        "method": "POST",
+        "url": "http://python-mcp:7010/neo4j/schema",
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "Content-Type",
+              "valueProvider": "fieldValue",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}"
+      },
+      "id": "designer-get-schema-2",
+      "name": "designer_get_schema_2",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        3480,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Get the schema of the Neo4j database including node labels, relationship types, and property keys.",
+        "method": "POST",
+        "url": "http://python-mcp:7010/neo4j/schema",
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "Content-Type",
+              "valueProvider": "fieldValue",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}"
+      },
+      "id": "query-get-schema",
+      "name": "query_get_schema",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1340,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Neo4j MCP Init",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Neo4j MCP Init": {
+      "main": [
+        [
+          {
+            "node": "Delete All Nodes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete All Nodes": {
+      "main": [
+        [
+          {
+            "node": "Seed DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Seed DB": {
+      "main": [
+        [
+          {
+            "node": "Warm Up Lean",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "Router Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Route": {
+      "main": [
+        [
+          {
+            "node": "IF Is Pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Is Pipeline": {
+      "main": [
+        [
+          {
+            "node": "Prep Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Query Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Input": {
+      "main": [
+        [
+          {
+            "node": "Designer Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Designer Agent": {
+      "main": [
+        [
+          {
+            "node": "Extract Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Plan": {
+      "main": [
+        [
+          {
+            "node": "Prover Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prover Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Result": {
+      "main": [
+        [
+          {
+            "node": "IF Prover Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Prover Success": {
+      "main": [
+        [
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prep Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Feedback": {
+      "main": [
+        [
+          {
+            "node": "Designer Agent 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Designer Agent 2": {
+      "main": [
+        [
+          {
+            "node": "Extract Plan 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Plan 2": {
+      "main": [
+        [
+          {
+            "node": "Prover Agent 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prover Agent 2": {
+      "main": [
+        [
+          {
+            "node": "Parse Result 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Result 2": {
+      "main": [
+        [
+          {
+            "node": "IF Prover 2 Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Prover 2 Success": {
+      "main": [
+        [
+          {
+            "node": "Format Output 2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router LLM": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Router Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Designer LLM": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Designer Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "designer_read_cypher": {
+      "ai_tool": [
+        [
+          {
+            "node": "Designer Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prover LLM": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Prover Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prover_lean_command": {
+      "ai_tool": [
+        [
+          {
+            "node": "Prover Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prover_read_cypher": {
+      "ai_tool": [
+        [
+          {
+            "node": "Prover Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prover_get_schema": {
+      "ai_tool": [
+        [
+          {
+            "node": "Prover Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Designer LLM 2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Designer Agent 2",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "designer_read_cypher_2": {
+      "ai_tool": [
+        [
+          {
+            "node": "Designer Agent 2",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prover LLM 2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Prover Agent 2",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prover_lean_command_2": {
+      "ai_tool": [
+        [
+          {
+            "node": "Prover Agent 2",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prover_read_cypher_2": {
+      "ai_tool": [
+        [
+          {
+            "node": "Prover Agent 2",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prover_get_schema_2": {
+      "ai_tool": [
+        [
+          {
+            "node": "Prover Agent 2",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query LLM": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Query Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "query_read_cypher": {
+      "ai_tool": [
+        [
+          {
+            "node": "Query Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "designer_get_schema": {
+      "ai_tool": [
+        [
+          {
+            "node": "Designer Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "designer_get_schema_2": {
+      "ai_tool": [
+        [
+          {
+            "node": "Designer Agent 2",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "query_get_schema": {
+      "ai_tool": [
+        [
+          {
+            "node": "Query Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "active": false
+}

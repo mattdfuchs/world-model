@@ -13,8 +13,33 @@
 -/
 import WorldModel.KB.Arrow.Arrow
 import WorldModel.KB.Arrow.SheetDiagram
-import WorldModel.KB.Boxes           -- Patient, HeartRate, BloodPressure, VO2Max, etc.
 import WorldModel.KB.Facts           -- speaks facts for SharedLangEvidence
+
+open KB.Facts
+
+-- ── Domain types ──────────────────────────────────────────────────────────
+
+inductive Patient : String → Type where
+  | mk : (name : String) → Patient name
+
+inductive Clinician : String → Type where
+  | mk : (name : String) → Clinician name
+
+inductive HeartRate : String → Type where
+  | heartRate : {name : String} → Patient name → Int → HeartRate name
+
+inductive BloodPressure : String → Type where
+  | bloodPressure : {name : String} → Patient name → Rat → BloodPressure name
+
+inductive VO2Max : String → Type where
+  | vO2Max : {name : String} → Patient name → Int → VO2Max name
+
+inductive ProductsOutput (name : String) where
+  | products : String → Int → Rat → Int → ProductsOutput name
+
+inductive AssessmentResult (name : String) where
+  | success : Patient name → String → Int → Rat → Int → AssessmentResult name
+  | failure : Patient name → String → AssessmentResult name
 
 -- ── Evidence types ──────────────────────────────────────────────────────────
 
@@ -24,12 +49,6 @@ structure SharedLangEvidence (cn pn : String) : Type where
   lang : String
   cSpeaks : speaks (Human.mk cn) (Language.mk lang)
   pSpeaks : speaks (Human.mk pn) (Language.mk lang)
-
-/-- Concrete evidence that Allen and Jose share Spanish. -/
-def allenJoseLangEvidence : SharedLangEvidence "Allen" "Jose" :=
-  { lang := "Spanish"
-    cSpeaks := allen_speaks_spanish
-    pSpeaks := jose_speaks_spanish }
 
 -- ── Consent and disqualification types ─────────────────────────────────────
 
@@ -48,6 +67,17 @@ inductive DisqualificationReason : Type where
 inductive NonQualifying (name : String) : Type where
   | mk : Patient name → DisqualificationReason → NonQualifying name
 
+-- ── Worked example: Jose/Allen pipeline ──────────────────────────────────────
+-- Everything below is namespaced to avoid collisions with LLM-generated code.
+
+namespace JoseExample
+
+/-- Concrete evidence that Allen and Jose share Spanish. -/
+def allenJoseLangEvidence : SharedLangEvidence "Allen" "Jose" :=
+  { lang := "Spanish"
+    cSpeaks := allen_speaks_spanish
+    pSpeaks := jose_speaks_spanish }
+
 -- ── Initial context ─────────────────────────────────────────────────────────
 
 /-- Starting context: just the patient. -/
@@ -64,8 +94,8 @@ abbrev clinicExt : Ctx := [Clinic "ValClinic", Clinician "Allen",
 
 /-- Room scope: room marker + equipment + clinician qualifications. -/
 abbrev roomExt : Ctx := [Room "Room3", ExamBed, BPMonitor, VO2Equipment,
-                          ExamBedQual "Allen", BPMonitorQual "Allen",
-                          VO2EquipmentQual "Allen"]
+                          holdsExamBedQual allen .mk, holdsBPMonitorQual allen .mk,
+                          holdsVO2EquipmentQual allen .mk]
 
 -- ── Full inner context ──────────────────────────────────────────────────────
 
@@ -75,9 +105,9 @@ abbrev roomExt : Ctx := [Room "Room3", ExamBed, BPMonitor, VO2Equipment,
     1      ExamBed
     2      BPMonitor
     3      VO2Equipment
-    4      ExamBedQual "Allen"
-    5      BPMonitorQual "Allen"
-    6      VO2EquipmentQual "Allen"
+    4      holdsExamBedQual allen .mk
+    5      holdsBPMonitorQual allen .mk
+    6      holdsVO2EquipmentQual allen .mk
     7      Clinic "ValClinic"
     8      Clinician "Allen"
     9      SharedLangEvidence "Allen" "Jose"
@@ -97,26 +127,27 @@ def insideAllScopesSel {extra : Ctx}
 /-- Shared disqualification arrow: finds Patient at index 11, produces NonQualifying. -/
 def nqArrow : Arrow insideAllScopes (insideAllScopes ++ [NonQualifying "Jose"]) :=
   .step
-    { inputs := Tel.ofList [Patient "Jose"]
+    { name := "disqualify"
+      description := "Records patient disqualification with a reason"
+      inputs := Tel.ofList [Patient "Jose"]
       consumes := []
       produces := [NonQualifying "Jose"] }
     insideAllScopes
-    (.bind (Patient.mk "Jose")
-           (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))))
+    (.bind (Patient.mk "Jose") (by elem_tac)
       .nil)
 
 -- ── Stage 0: Consent ────────────────────────────────────────────────────────
 
 def consentArrow : Arrow insideAllScopes (insideAllScopes ++ [ConsentGiven "Jose"]) :=
   .step
-    { inputs := Tel.ofList [Patient "Jose", SharedLangEvidence "Allen" "Jose"]
+    { name := "consent"
+      description := "Obtains informed consent from the patient"
+      inputs := Tel.ofList [Patient "Jose", SharedLangEvidence "Allen" "Jose"]
       consumes := []
       produces := [ConsentGiven "Jose"] }
     insideAllScopes
-    (.bind (Patient.mk "Jose")
-           (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))))
-      (.bind allenJoseLangEvidence
-             (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))
+    (.bind (Patient.mk "Jose") (by elem_tac)
+      (.bind allenJoseLangEvidence (by elem_tac)
         .nil))
 
 -- ── Stage 1: Heart measurement ──────────────────────────────────────────────
@@ -125,21 +156,18 @@ abbrev afterConsent : Ctx := insideAllScopes ++ [ConsentGiven "Jose"]
 
 def heartArrow : Arrow afterConsent (afterConsent ++ [HeartRate "Jose"]) :=
   .step
-    { inputs := Tel.ofList [Patient "Jose", Clinician "Allen", ExamBed,
-                            ExamBedQual "Allen", SharedLangEvidence "Allen" "Jose"]
+    { name := "heartMeasurement"
+      description := "Measures the patient's heart rate using an exam bed"
+      inputs := Tel.ofList [Patient "Jose", Clinician "Allen", ExamBed,
+                            holdsExamBedQual allen .mk, SharedLangEvidence "Allen" "Jose"]
       consumes := []
       produces := [HeartRate "Jose"] }
     afterConsent
-    (.bind (Patient.mk "Jose")
-           (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))))
-      (.bind (Clinician.mk "Allen")
-             (.there (.there (.there (.there (.there (.there (.there (.there .here))))))))
-        (.bind ExamBed.mk
-               (.there .here)
-          (.bind (ExamBedQual.mk "Allen")
-                 (.there (.there (.there (.there .here))))
-            (.bind allenJoseLangEvidence
-                   (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))
+    (.bind (Patient.mk "Jose") (by elem_tac)
+      (.bind (Clinician.mk "Allen") (by elem_tac)
+        (.bind ExamBed.mk (by elem_tac)
+          (.bind holdsExamBedQual.mk (by elem_tac)
+            (.bind allenJoseLangEvidence (by elem_tac)
               .nil)))))
 
 -- ── Stage 2: Blood pressure measurement ─────────────────────────────────────
@@ -148,21 +176,18 @@ abbrev afterHeart : Ctx := afterConsent ++ [HeartRate "Jose"]
 
 def bpArrow : Arrow afterHeart (afterHeart ++ [BloodPressure "Jose"]) :=
   .step
-    { inputs := Tel.ofList [Patient "Jose", Clinician "Allen", BPMonitor,
-                            BPMonitorQual "Allen", SharedLangEvidence "Allen" "Jose"]
+    { name := "bpMeasurement"
+      description := "Measures the patient's blood pressure using a BP monitor"
+      inputs := Tel.ofList [Patient "Jose", Clinician "Allen", BPMonitor,
+                            holdsBPMonitorQual allen .mk, SharedLangEvidence "Allen" "Jose"]
       consumes := []
       produces := [BloodPressure "Jose"] }
     afterHeart
-    (.bind (Patient.mk "Jose")
-           (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))))
-      (.bind (Clinician.mk "Allen")
-             (.there (.there (.there (.there (.there (.there (.there (.there .here))))))))
-        (.bind BPMonitor.mk
-               (.there (.there .here))
-          (.bind (BPMonitorQual.mk "Allen")
-                 (.there (.there (.there (.there (.there .here)))))
-            (.bind allenJoseLangEvidence
-                   (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))
+    (.bind (Patient.mk "Jose") (by elem_tac)
+      (.bind (Clinician.mk "Allen") (by elem_tac)
+        (.bind BPMonitor.mk (by elem_tac)
+          (.bind holdsBPMonitorQual.mk (by elem_tac)
+            (.bind allenJoseLangEvidence (by elem_tac)
               .nil)))))
 
 -- ── Stage 3: VO2 max measurement ────────────────────────────────────────────
@@ -171,21 +196,18 @@ abbrev afterBP : Ctx := afterHeart ++ [BloodPressure "Jose"]
 
 def vo2Arrow : Arrow afterBP (afterBP ++ [VO2Max "Jose"]) :=
   .step
-    { inputs := Tel.ofList [Patient "Jose", Clinician "Allen", VO2Equipment,
-                            VO2EquipmentQual "Allen", SharedLangEvidence "Allen" "Jose"]
+    { name := "vo2Measurement"
+      description := "Measures the patient's VO2 max using VO2 equipment"
+      inputs := Tel.ofList [Patient "Jose", Clinician "Allen", VO2Equipment,
+                            holdsVO2EquipmentQual allen .mk, SharedLangEvidence "Allen" "Jose"]
       consumes := []
       produces := [VO2Max "Jose"] }
     afterBP
-    (.bind (Patient.mk "Jose")
-           (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))))
-      (.bind (Clinician.mk "Allen")
-             (.there (.there (.there (.there (.there (.there (.there (.there .here))))))))
-        (.bind VO2Equipment.mk
-               (.there (.there (.there .here)))
-          (.bind (VO2EquipmentQual.mk "Allen")
-                 (.there (.there (.there (.there (.there (.there .here))))))
-            (.bind allenJoseLangEvidence
-                   (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))
+    (.bind (Patient.mk "Jose") (by elem_tac)
+      (.bind (Clinician.mk "Allen") (by elem_tac)
+        (.bind VO2Equipment.mk (by elem_tac)
+          (.bind holdsVO2EquipmentQual.mk (by elem_tac)
+            (.bind allenJoseLangEvidence (by elem_tac)
               .nil)))))
 
 -- ── Stage 4: Products ───────────────────────────────────────────────────────
@@ -194,19 +216,17 @@ abbrev afterVO2 : Ctx := afterBP ++ [VO2Max "Jose"]
 
 def productsArrow : Arrow afterVO2 (afterVO2 ++ [ProductsOutput "Jose"]) :=
   .step
-    { inputs := Tel.ofList [ConsentGiven "Jose", HeartRate "Jose",
+    { name := "products"
+      description := "Aggregates all measurement results into a single output"
+      inputs := Tel.ofList [ConsentGiven "Jose", HeartRate "Jose",
                             BloodPressure "Jose", VO2Max "Jose"]
       consumes := []
       produces := [ProductsOutput "Jose"] }
     afterVO2
-    (.bind (ConsentGiven.mk (Patient.mk "Jose") "signed")
-           (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here))))))))))))
-      (.bind (HeartRate.heartRate (Patient.mk "Jose") 72)
-             (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))))))
-        (.bind (BloodPressure.bloodPressure (Patient.mk "Jose") 120)
-               (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here))))))))))))))
-          (.bind (VO2Max.vO2Max (Patient.mk "Jose") 45)
-                 (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))))))))
+    (.bind (ConsentGiven.mk (Patient.mk "Jose") "signed") (by elem_tac)
+      (.bind (HeartRate.heartRate (Patient.mk "Jose") 72) (by elem_tac)
+        (.bind (BloodPressure.bloodPressure (Patient.mk "Jose") 120) (by elem_tac)
+          (.bind (VO2Max.vO2Max (Patient.mk "Jose") 45) (by elem_tac)
             .nil))))
 
 -- ── Stage 5: Final assessment ───────────────────────────────────────────────
@@ -215,14 +235,14 @@ abbrev afterProducts : Ctx := afterVO2 ++ [ProductsOutput "Jose"]
 
 def assessmentArrow : Arrow afterProducts (afterProducts ++ [AssessmentResult "Jose"]) :=
   .step
-    { inputs := Tel.ofList [Patient "Jose", ProductsOutput "Jose"]
+    { name := "assessment"
+      description := "Evaluates aggregated results to determine if patient qualifies"
+      inputs := Tel.ofList [Patient "Jose", ProductsOutput "Jose"]
       consumes := []
       produces := [AssessmentResult "Jose"] }
     afterProducts
-    (.bind (Patient.mk "Jose")
-           (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here)))))))))))
-      (.bind (ProductsOutput.products "signed" 72 120 45)
-             (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there (.there .here))))))))))))))))
+    (.bind (Patient.mk "Jose") (by elem_tac)
+      (.bind (ProductsOutput.products "signed" 72 120 45) (by elem_tac)
         .nil))
 
 -- ── Scoped clinical pipeline ────────────────────────────────────────────────
@@ -244,9 +264,9 @@ def scopedClinicalPipeline : SheetDiagram joseCtx
      joseCtx ++ [ConsentGiven "Jose", HeartRate "Jose",
                   BloodPressure "Jose", VO2Max "Jose",
                   ProductsOutput "Jose", AssessmentResult "Jose"]] :=
-  .scope trialExt
-    (.scope clinicExt
-      (.scope roomExt
+  .scope "trial" trialExt
+    (.scope "clinic" clinicExt
+      (.scope "room" roomExt
         (.join (.join (.join
           (.branch (Split.idLeft insideAllScopes)
             insideAllScopesSel (Selection.id insideAllScopes)
@@ -266,3 +286,5 @@ def scopedClinicalPipeline : SheetDiagram joseCtx
                           (.arrow nqArrow)
                           (.pipe productsArrow
                             (.arrow assessmentArrow)))))))))))))))
+
+end JoseExample

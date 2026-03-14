@@ -2,5 +2,7 @@ import WorldModel.KB.Types
 import WorldModel.KB.Relations
 import WorldModel.KB.Facts
 import WorldModel.KB.Theorems
-import WorldModel.KB.Boxes.Compose
+import WorldModel.KB.Boxes
 import WorldModel.KB.Arrow
+import WorldModel.KB.Neo4j
+import WorldModel.KB.ActionCatalog

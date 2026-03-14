@@ -1,0 +1,99 @@
+digraph neo4j {
+  rankdir=TB;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=9, style=filled, shape=box];
+  edge [fontname="Helvetica", fontsize=8];
+  nodesep=0.4;
+  ranksep=0.5;
+
+  // Categories
+  Equipment [fillcolor="#fff3cd", color="#ffc107"];
+  Qualification [fillcolor="#fff3cd", color="#ffc107"];
+  Measurement [fillcolor="#fff3cd", color="#ffc107"];
+
+  // Trial
+  OurTrial [label="ClinicalTrial\n\"OurTrial\"", fillcolor="#d4edda", color="#28a745"];
+  sharedLang [label="Constraint\n\"sharedLanguage\"", fillcolor="#f8d7da", color="#dc3545", shape=diamond];
+
+  // Clinic
+  ValClinic [label="Clinic\n\"ValClinic\"", fillcolor="#d4edda", color="#28a745"];
+  Valencia [label="City\n\"Valencia\"", fillcolor="#e2e3e5", color="#6c757d"];
+
+  // Room
+  Room3 [label="Room\n\"Room3\"", fillcolor="#d4edda", color="#28a745"];
+
+  // Equipment
+  ExamBed [fillcolor="#cce5ff", color="#4a86c8"];
+  BPMonitor [fillcolor="#cce5ff", color="#4a86c8"];
+  VO2Equipment [fillcolor="#cce5ff", color="#4a86c8"];
+
+  // Constraints
+  examBedC [label="Constraint\n\"examBedQual\"", fillcolor="#f8d7da", color="#dc3545", shape=diamond];
+  bpC [label="Constraint\n\"bpMonitorQual\"", fillcolor="#f8d7da", color="#dc3545", shape=diamond];
+  vo2C [label="Constraint\n\"vo2Qual\"", fillcolor="#f8d7da", color="#dc3545", shape=diamond];
+
+  // Qualifications (shared concepts - unit types)
+  ExamBedQual [fillcolor="#d6d8f7", color="#6f42c1"];
+  BPMonitorQual [fillcolor="#d6d8f7", color="#6f42c1"];
+  VO2EquipmentQual [fillcolor="#d6d8f7", color="#6f42c1"];
+
+  // Measurements
+  HeartRate [fillcolor="#e8f0fe", color="#4a86c8"];
+  BloodPressure [fillcolor="#e8f0fe", color="#4a86c8"];
+  VO2Max [fillcolor="#e8f0fe", color="#4a86c8"];
+
+  // People
+  Allen [label="Human\n\"Allen\"", fillcolor="#d4edda", color="#28a745"];
+  Matthew [label="Human\n\"Matthew\"", fillcolor="#d4edda", color="#28a745"];
+  Clinician [label="Role\n\"Clinician\"", fillcolor="#e2e3e5", color="#6c757d"];
+
+  // Containment
+  OurTrial -> sharedLang [label="imposesConstraint"];
+  OurTrial -> ValClinic [label="trialApproves"];
+  ValClinic -> Valencia [label="isIn"];
+  ValClinic -> Room3 [label="clinicHasRoom"];
+  Room3 -> ExamBed [label="roomHasExamBed"];
+  Room3 -> BPMonitor [label="roomHasBPMonitor"];
+  Room3 -> VO2Equipment [label="roomHasVO2Equip"];
+
+  // imposesConstraint
+  ExamBed -> examBedC [label="imposesConstraint"];
+  BPMonitor -> bpC [label="imposesConstraint"];
+  VO2Equipment -> vo2C [label="imposesConstraint"];
+
+  // isA
+  ExamBed -> Equipment [label="isA", style=dashed, color="#ffc107"];
+  BPMonitor -> Equipment [label="isA", style=dashed, color="#ffc107"];
+  VO2Equipment -> Equipment [label="isA", style=dashed, color="#ffc107"];
+
+  ExamBedQual -> Qualification [label="isA", style=dashed, color="#ffc107"];
+  BPMonitorQual -> Qualification [label="isA", style=dashed, color="#ffc107"];
+  VO2EquipmentQual -> Qualification [label="isA", style=dashed, color="#ffc107"];
+
+  HeartRate -> Measurement [label="isA", style=dashed, color="#ffc107"];
+  BloodPressure -> Measurement [label="isA", style=dashed, color="#ffc107"];
+  VO2Max -> Measurement [label="isA", style=dashed, color="#ffc107"];
+
+  // qualificationFor
+  ExamBedQual -> ExamBed [label="qualificationFor", color="#6f42c1"];
+  BPMonitorQual -> BPMonitor [label="qualificationFor", color="#6f42c1"];
+  VO2EquipmentQual -> VO2Equipment [label="qualificationFor", color="#6f42c1"];
+
+  // hasQualification (people -> shared qualification concepts)
+  Allen -> ExamBedQual [label="hasQualification", color="#6f42c1"];
+  Allen -> BPMonitorQual [label="hasQualification", color="#6f42c1"];
+  Allen -> VO2EquipmentQual [label="hasQualification", color="#6f42c1"];
+  Matthew -> ExamBedQual [label="hasQualification", color="#6f42c1"];
+  Matthew -> BPMonitorQual [label="hasQualification", color="#6f42c1"];
+  Matthew -> VO2EquipmentQual [label="hasQualification", color="#6f42c1"];
+
+  // equipmentFor
+  ExamBed -> HeartRate [label="equipmentFor", color="#17a2b8"];
+  BPMonitor -> BloodPressure [label="equipmentFor", color="#17a2b8"];
+  VO2Equipment -> VO2Max [label="equipmentFor", color="#17a2b8"];
+
+  // Allen
+  Allen -> Clinician [label="hasRole"];
+  Allen -> ValClinic [label="assigned"];
+  Matthew -> Clinician [label="hasRole"];
+}

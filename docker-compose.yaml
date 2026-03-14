@@ -34,6 +34,7 @@ services:
     environment:
       PY_MCP_PORT: "${PY_MCP_PORT}"
       LEAN_PROJECT_PATH: /app/lean4
+      NEO4J_MCP_AUTH_HEADER: "${NEO4J_MCP_AUTH_HEADER}"
     ports:
       - "${PY_MCP_PORT}:7010"
     volumes:
@@ -53,7 +54,7 @@ services:
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       NODE_FUNCTION_ALLOW_EXTERNAL: "axios"
-      NODE_FUNCTION_ALLOW_BUILTIN: "fs"
+      NODE_FUNCTION_ALLOW_BUILTIN: "fs,http"
     volumes:
       - n8n_data:/home/node/.n8n
       - ./mcp/neo4j/script.txt:/home/node/.n8n-files/script.txt:ro

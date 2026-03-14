@@ -31,6 +31,8 @@ def Tel.ofList : Ctx → Tel
     - `consumes`: flat list of types consumed (removed from context on exit)
     - `produces`: flat list of new types created -/
 structure Spec where
-  inputs   : Tel
-  consumes : Ctx
-  produces : Ctx
+  name        : String
+  description : String := ""
+  inputs      : Tel
+  consumes    : Ctx
+  produces    : Ctx

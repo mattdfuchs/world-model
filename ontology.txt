@@ -1,3 +1,5 @@
+Set up an initial meeting for Jean for the current clinical trial. If he consents, get his heart rate, blood pressure, and VO2 max
+
 Consider our use case. What are the objects we, minimally want in the db?
 
 Set up an appointment for Jose for ClinicalTrial Uno

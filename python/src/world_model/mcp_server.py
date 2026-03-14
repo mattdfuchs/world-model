@@ -4,13 +4,28 @@ import os
 import subprocess
 from pathlib import Path
 
-from fastapi import FastAPI, Form
+import httpx
+from fastapi import FastAPI, Form, Request
 from pydantic import BaseModel
 
 from .lean_client import LeanClient
 
 app = FastAPI(title="Python MCP Server", version="0.1.0")
 lean_client = LeanClient()
+
+NEO4J_MCP_URL = os.getenv("NEO4J_MCP_URL", "http://mcp-neo4j:7011/mcp")
+NEO4J_MCP_AUTH = os.getenv("NEO4J_MCP_AUTH_HEADER", "")
+
+
+def _extract_mcp_result(body: dict) -> dict:
+    """Strip JSON-RPC envelope, return just the result text."""
+    try:
+        content = body["result"]["content"]
+        text = content[0]["text"] if content else ""
+        is_error = body["result"].get("isError", False)
+        return {"ok": not is_error, "data": text}
+    except (KeyError, IndexError):
+        return body
 
 
 @app.get("/health")
@@ -144,6 +159,13 @@ def lean_command_form(cmd: str = Form(...), env: int | None = Form(None)) -> dic
     return lean_command(LeanCommandRequest(cmd=cmd, env=env))
 
 
+@app.post("/lean/command/raw")
+async def lean_command_raw(request: Request) -> dict:
+    """Accept Lean code as raw text body — avoids JSON escaping issues."""
+    cmd = (await request.body()).decode()
+    return lean_command(LeanCommandRequest(cmd=cmd))
+
+
 @app.post("/lean/file")
 def lean_file(request: LeanFileRequest) -> dict:
     try:
@@ -151,6 +173,54 @@ def lean_file(request: LeanFileRequest) -> dict:
     except (RuntimeError, ValueError) as exc:
         return {"ok": False, "error": str(exc)}
     return {"ok": True, "result": result}
+
+
+class CypherRequest(BaseModel):
+    query: str
+
+
+@app.post("/neo4j/read")
+async def neo4j_read(request: CypherRequest) -> dict:
+    """Proxy a read-only Cypher query to the Neo4j MCP server (JSON body)."""
+    return await _neo4j_read(request.query)
+
+
+@app.post("/neo4j/read/form")
+async def neo4j_read_form(query: str = Form(...)) -> dict:
+    """Same as /neo4j/read but accepts form data (for n8n tool compatibility)."""
+    return await _neo4j_read(query)
+
+
+async def _neo4j_read(query: str) -> dict:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            NEO4J_MCP_URL,
+            json={
+                "jsonrpc": "2.0",
+                "method": "tools/call",
+                "params": {"name": "read-cypher", "arguments": {"query": query}},
+                "id": 50,
+            },
+            headers={"Authorization": NEO4J_MCP_AUTH, "Content-Type": "application/json"},
+        )
+        return _extract_mcp_result(resp.json())
+
+
+@app.post("/neo4j/schema")
+async def neo4j_schema() -> dict:
+    """Proxy a get-schema call to the Neo4j MCP server."""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            NEO4J_MCP_URL,
+            json={
+                "jsonrpc": "2.0",
+                "method": "tools/call",
+                "params": {"name": "get-schema", "arguments": {}},
+                "id": 51,
+            },
+            headers={"Authorization": NEO4J_MCP_AUTH, "Content-Type": "application/json"},
+        )
+        return _extract_mcp_result(resp.json())
 
 
 def main() -> None:

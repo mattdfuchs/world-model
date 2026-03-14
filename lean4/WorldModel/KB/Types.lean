@@ -14,15 +14,8 @@ inductive City : String → Type where
 inductive Clinic : String → Type where
   | mk : (s : String) → Clinic s
 
-structure ClinicInfo (name : String) where
-  clinicians : List String
-  rooms : List String
-
 inductive ClinicalTrial : String → Type where
   | mk : (s : String) → ClinicalTrial s
-
-structure ClinicalTrialInfo (name : String) where
-  approvedClinics : List String
 
 -- ── Equipment and room types for nested scopes ──────────────────────────────
 
@@ -30,19 +23,14 @@ inductive ExamBed : Type where | mk
 inductive BPMonitor : Type where | mk
 inductive VO2Equipment : Type where | mk
 
--- ── Equipment qualification types (clinician certified to use equipment) ────
+-- ── Equipment qualification types (concepts — who holds them is a relation) ──
 
-inductive ExamBedQual : String → Type where | mk : (s : String) → ExamBedQual s
-inductive BPMonitorQual : String → Type where | mk : (s : String) → BPMonitorQual s
-inductive VO2EquipmentQual : String → Type where | mk : (s : String) → VO2EquipmentQual s
+inductive ExamBedQual : Type where | mk
+inductive BPMonitorQual : Type where | mk
+inductive VO2EquipmentQual : Type where | mk
 
-/-- Room marker for use in contexts. Equipment is tracked separately in RoomInfo. -/
 inductive Room : String → Type where
   | mk : (s : String) → Room s
-
-/-- Room metadata: maps a room name to its available equipment. -/
-structure RoomInfo (name : String) where
-  equipment : List Type
 
 inductive Human : String → Type where
   | mk : (s : String) → Human s
@@ -52,3 +40,17 @@ inductive Role where
   | Administrator
   | Clinician
   deriving DecidableEq, Repr
+
+-- ── Edge relations for structure data (replaces ClinicInfo, ClinicalTrialInfo, RoomInfo) ──
+
+inductive trialApproves {t c : String} (trial : ClinicalTrial t) (clinic : Clinic c) : Type where | mk
+inductive clinicHasRoom {c r : String} (clinic : Clinic c) (room : Room r) : Type where | mk
+inductive roomHasExamBed {r : String} (room : Room r) (equip : ExamBed) : Type where | mk
+inductive roomHasBPMonitor {r : String} (room : Room r) (equip : BPMonitor) : Type where | mk
+inductive roomHasVO2Equip {r : String} (room : Room r) (equip : VO2Equipment) : Type where | mk
+
+-- ── Qualification-holding relations (clinician holds a qualification) ────────
+
+inductive holdsExamBedQual {h : String} (person : Human h) (q : ExamBedQual) : Type where | mk
+inductive holdsBPMonitorQual {h : String} (person : Human h) (q : BPMonitorQual) : Type where | mk
+inductive holdsVO2EquipmentQual {h : String} (person : Human h) (q : VO2EquipmentQual) : Type where | mk

@@ -1,79 +1,292 @@
-create (n1:Language {})
-create (n2:City {})
-create (n3:Clinic {})
-create (n4:ClinicalTrial {})
-create (n5:Human {})
-create (n6:Patient {})
-create (n7:Administrator {})
-create (n8:Clinician {})
-
-create (n9:English)
-create (n10:Spanish)
-create (n11:French)
-
-create (n12:Valencia)
-create (n13:London)
-create (n14:Nice)
-create (n14_5:Paris)
-
-create (n15:Jose)
-create (n15_5:Jean)
-create (n16:Rick)
-create (n17:Allen)
-create (n18:Matthew)
-
-create (n19:ValClinic)
-create (n20:NiceClinic)
-create (n21:ParisClinic)
-create (n22:LondonClinic)
-
-create (n23:OurTrial)
-create (n24:Release)
-
-create (n9)-[:is_a]->(n1)
-create (n10)-[:is_a]->(n1)
-create (n11)-[:is_a]->(n1)
-
-create (n12)-[:is_a]->(n2)
-create (n13)-[:is_a]->(n2)
-create (n14)-[:is_a]->(n2)
-
-create (n15)-[:is_a]->(n5)
-create (n15_5)-[:is_a]->(n5)
-create (n16)-[:is_a]->(n5)
-create (n17)-[:is_a]->(n5)
-create (n18)-[:is_a]->(n5)
-
-create (n19)-[:is_a]->(n3)
-create (n20)-[:is_a]->(n3)
-create (n21)-[:is_a]->(n3)
-create (n22)-[:is_a]->(n3)
-
-create (n23)-[:is_a]->(n4)
-
-create (n15)-[:role]->(n6)
-create (n15)-[:lives]->(n12)
-create (n15)-[:speaks]->(n10)
-
-create (n15_5)-[:role]->(n6)
-create (n15_5)-[:lives]->(n14)
-create (n15_5)-[:speaks]->(n11)
-
-create (n16)-[:role]->(n7)
-create (n16)-[:speaks]->(n9)
-create (n16)-[:assigned]->(n22)
-
-create (n17)-[:role]->(n8)
-create (n17)-[:speaks]->(n9)
-create (n17)-[:speaks]->(n10)
-create (n17)-[:assigned]->(n19)
-
-create (n18)-[:role]->(n8)
-create (n18)-[:speaks]->(n9)
-create (n18)-[:speaks]->(n11)
-create (n18)-[:assigned]->(n20)
-
-create (n19)-[:is_in]->(n12)
-create (n20)-[:is_in]->(n14)
-create (n21)-[:is_in]->(n14_5)
-create (n22)-[:is_in]->(n13)
+MERGE (n:Human {name: "Jose"});
+MERGE (n:Human {name: "Rick"});
+MERGE (n:Human {name: "Allen"});
+MERGE (n:Human {name: "Matthew"});
+MERGE (n:Language {name: "English"});
+MERGE (n:Language {name: "Spanish"});
+MERGE (n:Language {name: "French"});
+MERGE (n:City {name: "Valencia"});
+MERGE (n:City {name: "London"});
+MERGE (n:City {name: "Nice"});
+MERGE (n:City {name: "Paris"});
+MERGE (n:Clinic {name: "ValClinic"});
+MERGE (n:Clinic {name: "NiceClinic"});
+MERGE (n:Clinic {name: "ParisClinic"});
+MERGE (n:Clinic {name: "LondonClinic"});
+MERGE (n:ClinicalTrial {name: "OurTrial"});
+MERGE (n:Room {name: "Room3"});
+MERGE (n:Role {name: "Patient"});
+MERGE (n:Role {name: "Administrator"});
+MERGE (n:Role {name: "Clinician"});
+MERGE (n:ExamBed);
+MERGE (n:BPMonitor);
+MERGE (n:VO2Equipment);
+MERGE (n:ExamBedQual);
+MERGE (n:BPMonitorQual);
+MERGE (n:VO2EquipmentQual);
+MATCH (a:Human {name: "Jose"})
+MATCH (b:Role {name: "Patient"})
+MERGE (a)-[:hasRole]->(b);
+MATCH (a:Human {name: "Rick"})
+MATCH (b:Role {name: "Administrator"})
+MERGE (a)-[:hasRole]->(b);
+MATCH (a:Human {name: "Allen"})
+MATCH (b:Role {name: "Clinician"})
+MERGE (a)-[:hasRole]->(b);
+MATCH (a:Human {name: "Matthew"})
+MATCH (b:Role {name: "Clinician"})
+MERGE (a)-[:hasRole]->(b);
+MATCH (a:Human {name: "Jose"})
+MATCH (b:Language {name: "Spanish"})
+MERGE (a)-[:speaks]->(b);
+MATCH (a:Human {name: "Rick"})
+MATCH (b:Language {name: "English"})
+MERGE (a)-[:speaks]->(b);
+MATCH (a:Human {name: "Allen"})
+MATCH (b:Language {name: "English"})
+MERGE (a)-[:speaks]->(b);
+MATCH (a:Human {name: "Allen"})
+MATCH (b:Language {name: "Spanish"})
+MERGE (a)-[:speaks]->(b);
+MATCH (a:Human {name: "Matthew"})
+MATCH (b:Language {name: "English"})
+MERGE (a)-[:speaks]->(b);
+MATCH (a:Human {name: "Matthew"})
+MATCH (b:Language {name: "French"})
+MERGE (a)-[:speaks]->(b);
+MATCH (a:Human {name: "Jose"})
+MATCH (b:City {name: "Valencia"})
+MERGE (a)-[:lives]->(b);
+MATCH (a:Human {name: "Rick"})
+MATCH (b:Clinic {name: "LondonClinic"})
+MERGE (a)-[:assigned]->(b);
+MATCH (a:Human {name: "Allen"})
+MATCH (b:Clinic {name: "ValClinic"})
+MERGE (a)-[:assigned]->(b);
+MATCH (a:Human {name: "Matthew"})
+MATCH (b:Clinic {name: "NiceClinic"})
+MERGE (a)-[:assigned]->(b);
+MATCH (a:Clinic {name: "ValClinic"})
+MATCH (b:City {name: "Valencia"})
+MERGE (a)-[:isIn]->(b);
+MATCH (a:Clinic {name: "NiceClinic"})
+MATCH (b:City {name: "Nice"})
+MERGE (a)-[:isIn]->(b);
+MATCH (a:Clinic {name: "ParisClinic"})
+MATCH (b:City {name: "Paris"})
+MERGE (a)-[:isIn]->(b);
+MATCH (a:Clinic {name: "LondonClinic"})
+MATCH (b:City {name: "London"})
+MERGE (a)-[:isIn]->(b);
+MATCH (a:ClinicalTrial {name: "OurTrial"})
+MATCH (b:Clinic {name: "ValClinic"})
+MERGE (a)-[:trialApproves]->(b);
+MATCH (a:Clinic {name: "ValClinic"})
+MATCH (b:Room {name: "Room3"})
+MERGE (a)-[:clinicHasRoom]->(b);
+MATCH (a:Room {name: "Room3"})
+MATCH (b:ExamBed)
+MERGE (a)-[:roomHasExamBed]->(b);
+MATCH (a:Room {name: "Room3"})
+MATCH (b:BPMonitor)
+MERGE (a)-[:roomHasBPMonitor]->(b);
+MATCH (a:Room {name: "Room3"})
+MATCH (b:VO2Equipment)
+MERGE (a)-[:roomHasVO2Equip]->(b);
+MATCH (a:Human {name: "Allen"})
+MATCH (b:ExamBedQual)
+MERGE (a)-[:hasQualification]->(b);
+MATCH (a:Human {name: "Allen"})
+MATCH (b:BPMonitorQual)
+MERGE (a)-[:hasQualification]->(b);
+MATCH (a:Human {name: "Allen"})
+MATCH (b:VO2EquipmentQual)
+MERGE (a)-[:hasQualification]->(b);
+MATCH (a:Human {name: "Matthew"})
+MATCH (b:ExamBedQual)
+MERGE (a)-[:hasQualification]->(b);
+MATCH (a:Human {name: "Matthew"})
+MATCH (b:BPMonitorQual)
+MERGE (a)-[:hasQualification]->(b);
+MATCH (a:Human {name: "Matthew"})
+MATCH (b:VO2EquipmentQual)
+MERGE (a)-[:hasQualification]->(b);
+MERGE (n:Constraint {name: "sharedLanguage", english: "Clinician and patient must share a common language", leanType: "SharedLangEvidence"});
+MERGE (n:Constraint {name: "examBedQualification", english: "Operator must hold ExamBed certification", leanType: "ExamBedQual"});
+MERGE (n:Constraint {name: "bpMonitorQualification", english: "Operator must hold BP monitor certification", leanType: "BPMonitorQual"});
+MERGE (n:Constraint {name: "vo2Qualification", english: "Operator must hold VO2 equipment certification", leanType: "VO2EquipmentQual"});
+MERGE (n:Equipment);
+MERGE (n:Qualification);
+MERGE (n:Measurement);
+MERGE (n:ConsentGiven);
+MERGE (n:HeartRate);
+MERGE (n:BloodPressure);
+MERGE (n:VO2Max);
+MERGE (n:ProductsOutput);
+MERGE (n:AssessmentResult);
+MERGE (n:NonQualifying);
+MERGE (n:ActionSpec {name: "consent", description: "Obtains informed consent from the patient"});
+MERGE (n:ActionSpec {name: "heartMeasurement", description: "Measures the patient's heart rate using an exam bed"});
+MERGE (n:ActionSpec {name: "bpMeasurement", description: "Measures the patient's blood pressure using a BP monitor"});
+MERGE (n:ActionSpec {name: "vo2Measurement", description: "Measures the patient's VO2 max using VO2 equipment"});
+MERGE (n:ActionSpec {name: "products", description: "Aggregates all measurement results into a single output"});
+MERGE (n:ActionSpec {name: "assessment", description: "Evaluates aggregated results to determine if patient qualifies"});
+MERGE (n:ActionSpec {name: "disqualify", description: "Records patient disqualification with a reason"});
+MATCH (a:ClinicalTrial {name: "OurTrial"})
+MATCH (b:Constraint {name: "sharedLanguage"})
+MERGE (a)-[:imposesConstraint]->(b);
+MATCH (a:ExamBed)
+MATCH (b:Constraint {name: "examBedQualification"})
+MERGE (a)-[:imposesConstraint]->(b);
+MATCH (a:BPMonitor)
+MATCH (b:Constraint {name: "bpMonitorQualification"})
+MERGE (a)-[:imposesConstraint]->(b);
+MATCH (a:VO2Equipment)
+MATCH (b:Constraint {name: "vo2Qualification"})
+MERGE (a)-[:imposesConstraint]->(b);
+MATCH (a:ExamBed)
+MATCH (b:Equipment)
+MERGE (a)-[:isA]->(b);
+MATCH (a:BPMonitor)
+MATCH (b:Equipment)
+MERGE (a)-[:isA]->(b);
+MATCH (a:VO2Equipment)
+MATCH (b:Equipment)
+MERGE (a)-[:isA]->(b);
+MATCH (a:ExamBedQual)
+MATCH (b:Qualification)
+MERGE (a)-[:isA]->(b);
+MATCH (a:BPMonitorQual)
+MATCH (b:Qualification)
+MERGE (a)-[:isA]->(b);
+MATCH (a:VO2EquipmentQual)
+MATCH (b:Qualification)
+MERGE (a)-[:isA]->(b);
+MATCH (a:HeartRate)
+MATCH (b:Measurement)
+MERGE (a)-[:isA]->(b);
+MATCH (a:BloodPressure)
+MATCH (b:Measurement)
+MERGE (a)-[:isA]->(b);
+MATCH (a:VO2Max)
+MATCH (b:Measurement)
+MERGE (a)-[:isA]->(b);
+MATCH (a:ExamBedQual)
+MATCH (b:ExamBed)
+MERGE (a)-[:qualificationFor]->(b);
+MATCH (a:BPMonitorQual)
+MATCH (b:BPMonitor)
+MERGE (a)-[:qualificationFor]->(b);
+MATCH (a:VO2EquipmentQual)
+MATCH (b:VO2Equipment)
+MERGE (a)-[:qualificationFor]->(b);
+MATCH (a:ExamBed)
+MATCH (b:HeartRate)
+MERGE (a)-[:equipmentFor]->(b);
+MATCH (a:BPMonitor)
+MATCH (b:BloodPressure)
+MERGE (a)-[:equipmentFor]->(b);
+MATCH (a:VO2Equipment)
+MATCH (b:VO2Max)
+MERGE (a)-[:equipmentFor]->(b);
+MATCH (a:ActionSpec {name: "consent"})
+MATCH (b:Role {name: "Patient"})
+MERGE (a)-[:REQUIRES {role: "subject"}]->(b);
+MATCH (a:ActionSpec {name: "heartMeasurement"})
+MATCH (b:Role {name: "Patient"})
+MERGE (a)-[:REQUIRES {role: "subject"}]->(b);
+MATCH (a:ActionSpec {name: "heartMeasurement"})
+MATCH (b:Role {name: "Clinician"})
+MERGE (a)-[:REQUIRES {role: "operator"}]->(b);
+MATCH (a:ActionSpec {name: "heartMeasurement"})
+MATCH (b:ExamBed)
+MERGE (a)-[:REQUIRES {role: "equipment"}]->(b);
+MATCH (a:ActionSpec {name: "bpMeasurement"})
+MATCH (b:Role {name: "Patient"})
+MERGE (a)-[:REQUIRES {role: "subject"}]->(b);
+MATCH (a:ActionSpec {name: "bpMeasurement"})
+MATCH (b:Role {name: "Clinician"})
+MERGE (a)-[:REQUIRES {role: "operator"}]->(b);
+MATCH (a:ActionSpec {name: "bpMeasurement"})
+MATCH (b:BPMonitor)
+MERGE (a)-[:REQUIRES {role: "equipment"}]->(b);
+MATCH (a:ActionSpec {name: "vo2Measurement"})
+MATCH (b:Role {name: "Patient"})
+MERGE (a)-[:REQUIRES {role: "subject"}]->(b);
+MATCH (a:ActionSpec {name: "vo2Measurement"})
+MATCH (b:Role {name: "Clinician"})
+MERGE (a)-[:REQUIRES {role: "operator"}]->(b);
+MATCH (a:ActionSpec {name: "vo2Measurement"})
+MATCH (b:VO2Equipment)
+MERGE (a)-[:REQUIRES {role: "equipment"}]->(b);
+MATCH (a:ActionSpec {name: "products"})
+MATCH (b:ConsentGiven)
+MERGE (a)-[:REQUIRES {role: "prerequisite"}]->(b);
+MATCH (a:ActionSpec {name: "products"})
+MATCH (b:HeartRate)
+MERGE (a)-[:REQUIRES {role: "prerequisite"}]->(b);
+MATCH (a:ActionSpec {name: "products"})
+MATCH (b:BloodPressure)
+MERGE (a)-[:REQUIRES {role: "prerequisite"}]->(b);
+MATCH (a:ActionSpec {name: "products"})
+MATCH (b:VO2Max)
+MERGE (a)-[:REQUIRES {role: "prerequisite"}]->(b);
+MATCH (a:ActionSpec {name: "assessment"})
+MATCH (b:Role {name: "Patient"})
+MERGE (a)-[:REQUIRES {role: "subject"}]->(b);
+MATCH (a:ActionSpec {name: "assessment"})
+MATCH (b:ProductsOutput)
+MERGE (a)-[:REQUIRES {role: "prerequisite"}]->(b);
+MATCH (a:ActionSpec {name: "disqualify"})
+MATCH (b:Role {name: "Patient"})
+MERGE (a)-[:REQUIRES {role: "subject"}]->(b);
+MATCH (a:ActionSpec {name: "consent"})
+MATCH (b:ConsentGiven)
+MERGE (a)-[:PRODUCES]->(b);
+MATCH (a:ActionSpec {name: "heartMeasurement"})
+MATCH (b:HeartRate)
+MERGE (a)-[:PRODUCES]->(b);
+MATCH (a:ActionSpec {name: "bpMeasurement"})
+MATCH (b:BloodPressure)
+MERGE (a)-[:PRODUCES]->(b);
+MATCH (a:ActionSpec {name: "vo2Measurement"})
+MATCH (b:VO2Max)
+MERGE (a)-[:PRODUCES]->(b);
+MATCH (a:ActionSpec {name: "products"})
+MATCH (b:ProductsOutput)
+MERGE (a)-[:PRODUCES]->(b);
+MATCH (a:ActionSpec {name: "assessment"})
+MATCH (b:AssessmentResult)
+MERGE (a)-[:PRODUCES]->(b);
+MATCH (a:ActionSpec {name: "disqualify"})
+MATCH (b:NonQualifying)
+MERGE (a)-[:PRODUCES]->(b);
+MERGE (n:Human {name: "Jean"});
+MATCH (a:Human {name: "Jean"})
+MATCH (b:Role {name: "Patient"})
+MERGE (a)-[:hasRole]->(b);
+MATCH (a:Human {name: "Jean"})
+MATCH (b:Language {name: "French"})
+MERGE (a)-[:speaks]->(b);
+MATCH (a:Human {name: "Jean"})
+MATCH (b:City {name: "Paris"})
+MERGE (a)-[:lives]->(b);
+MATCH (a:ClinicalTrial {name: "OurTrial"})
+MATCH (b:Clinic {name: "ParisClinic"})
+MERGE (a)-[:trialApproves]->(b);
+MATCH (a:Human {name: "Matthew"})
+MATCH (b:Clinic {name: "ParisClinic"})
+MERGE (a)-[:assigned]->(b);
+MERGE (n:Room {name: "Room7"});
+MATCH (a:Clinic {name: "ParisClinic"})
+MATCH (b:Room {name: "Room7"})
+MERGE (a)-[:clinicHasRoom]->(b);
+MATCH (a:Room {name: "Room7"})
+MATCH (b:ExamBed)
+MERGE (a)-[:roomHasExamBed]->(b);
+MATCH (a:Room {name: "Room7"})
+MATCH (b:BPMonitor)
+MERGE (a)-[:roomHasBPMonitor]->(b);
+MATCH (a:Room {name: "Room7"})
+MATCH (b:VO2Equipment)
+MERGE (a)-[:roomHasVO2Equip]->(b);

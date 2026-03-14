@@ -1,0 +1,12 @@
+Lets work from the goal back. Consider we still want a consultation that starts with a patient and ends with either consent+measurements or refusal. However it needs to happen in the    
+  context of a particular clinical trial. The clinical trial has certain approved clinics which are available for the patient. Each clinic has employees and rooms. Employees have various   
+  qualifications, such as speaking particular languages, being approved for this clinical trial. Rooms have appurtenances, such as blood pressure monitors, exam tables, vo2max equipment.   
+  These seem to nest well - while you are in the clinical trial, things happen at an approved clinic, when you're at the clinic you have access to the employees and while you're in a room  
+  you have access to the material - and they pop off as you leave. However, items may stash other items where it's not easiliy nested - a clinician may have a stethoscope in a pocket       
+  that's brought into and removed from the context almost randomly. So far there's 2 use cases - one is push/pop with items becoming available on the push and leaving on the pop, and       
+  another is items that can be introduced and removed more or less ad hoc. Further, there is the question of introducing/removing constraints, such as "a clinician must speak the same      
+  language as the patient", "the clinic must be in the same city", and "the clinician must be qualified for this measurement", and "the clinician must be working at this point in time and  
+  not assigned elsewhere". (things are starting to get more complicated.) Looking, it seems obvious that items should be prepended to the context and constraints appended, making sure      
+  they are evaluated after the items are available. The last time I looked at the context code, the telescoping implied the constraints "knew" exactly which items they were talking about,  
+  but constraints might be more general, something like "for all clinicians, clinician assigned to patient => clinician and patient speak a common language". So, we have items and their    
+  relevant properties (i.e., Allen is at the clinic on Mondays and speaks Spanish) on the one hand and constraints on the other.   
