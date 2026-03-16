@@ -13,5 +13,9 @@ __pycache__/
 node_modules/
 .n8n/
 
+# Pipeline outputs
+out/*
+!out/.gitkeep
+
 # OS
 .DS_Store

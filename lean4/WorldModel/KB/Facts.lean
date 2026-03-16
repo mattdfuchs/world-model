@@ -32,12 +32,18 @@ def londonClinic : Clinic "LondonClinic" := .mk "LondonClinic"
 -- Clinical trials
 def ourTrial : ClinicalTrial "OurTrial" := .mk "OurTrial"
 
+-- Patients
+def jean    : Human "Jean"    := .mk "Jean"
+def george  : Human "George"  := .mk "George"
+
 -- Ground relation facts
 
 def jose_is_patient      : hasRole jose .Patient        := .mk
 def rick_is_admin        : hasRole rick .Administrator  := .mk
 def allen_is_clinician   : hasRole allen .Clinician     := .mk
 def matthew_is_clinician : hasRole matthew .Clinician   := .mk
+def jean_is_patient      : hasRole jean .Patient        := .mk
+def george_is_patient    : hasRole george .Patient      := .mk
 
 def jose_speaks_spanish    : speaks jose spanish    := .mk
 def rick_speaks_english    : speaks rick english    := .mk
@@ -45,12 +51,17 @@ def allen_speaks_english   : speaks allen english   := .mk
 def allen_speaks_spanish   : speaks allen spanish   := .mk
 def matthew_speaks_english : speaks matthew english := .mk
 def matthew_speaks_french  : speaks matthew french  := .mk
+def jean_speaks_french     : speaks jean french     := .mk
+def george_speaks_english  : speaks george english  := .mk
 
 def jose_lives_valencia : lives jose valencia := .mk
+def jean_lives_paris    : lives jean paris    := .mk
+def george_lives_london : lives george london := .mk
 
-def rick_assigned_london   : assigned rick londonClinic    := .mk
-def allen_assigned_val     : assigned allen valClinic      := .mk
-def matthew_assigned_nice  : assigned matthew niceClinic   := .mk
+def rick_assigned_london    : assigned rick londonClinic     := .mk
+def allen_assigned_val      : assigned allen valClinic       := .mk
+def matthew_assigned_nice   : assigned matthew niceClinic    := .mk
+def matthew_assigned_paris  : assigned matthew parisClinic   := .mk
 
 def valClinic_in_valencia  : isIn valClinic valencia    := .mk
 def niceClinic_in_nice     : isIn niceClinic nice       := .mk
@@ -60,10 +71,15 @@ def londonClinic_in_london : isIn londonClinic london   := .mk
 -- ── Structure edge facts (replaces ClinicInfo, ClinicalTrialInfo, RoomInfo) ──
 
 def trial_approves_val   : trialApproves ourTrial valClinic             := .mk
+def trial_approves_paris : trialApproves ourTrial parisClinic           := .mk
 def valClinic_has_room3  : clinicHasRoom valClinic (Room.mk "Room3")    := .mk
+def parisClinic_has_room7 : clinicHasRoom parisClinic (Room.mk "Room7") := .mk
 def room3_has_exambed    : roomHasExamBed (Room.mk "Room3") .mk         := .mk
 def room3_has_bpmonitor  : roomHasBPMonitor (Room.mk "Room3") .mk       := .mk
 def room3_has_vo2equip   : roomHasVO2Equip (Room.mk "Room3") .mk        := .mk
+def room7_has_exambed    : roomHasExamBed (Room.mk "Room7") .mk         := .mk
+def room7_has_bpmonitor  : roomHasBPMonitor (Room.mk "Room7") .mk       := .mk
+def room7_has_vo2equip   : roomHasVO2Equip (Room.mk "Room7") .mk        := .mk
 
 -- ── Qualification holdings ──────────────────────────────────────────────────
 

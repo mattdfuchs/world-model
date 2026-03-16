@@ -54,11 +54,12 @@ services:
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       NODE_FUNCTION_ALLOW_EXTERNAL: "axios"
-      NODE_FUNCTION_ALLOW_BUILTIN: "fs,http"
+      NODE_FUNCTION_ALLOW_BUILTIN: "fs,path,http"
     volumes:
       - n8n_data:/home/node/.n8n
       - ./mcp/neo4j/script.txt:/home/node/.n8n-files/script.txt:ro
       - ./n8n/workflows/test-components.json:/home/node/.n8n-files/test-components.json:ro
+      - ./out:/home/node/out
     depends_on:
       - mcp-neo4j
       - python-mcp

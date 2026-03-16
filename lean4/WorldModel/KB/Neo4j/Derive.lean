@@ -69,8 +69,9 @@ private def buildToNeo4jCmd (indVal : InductiveVal) : MetaM String := do
           ctorExplicitCount := ctorExplicitCount + 1
 
       -- Pattern 1: Unit type (0 params, 0 ctor args)
+      -- Include a name property so LLM queries using `.name` work naturally.
       if indVal.numParams == 0 && ctorExplicitCount == 0 then
-        return s!"instance : ToNeo4j {declNameStr} where\n  toRepr _ := .node \"{declNameStr}\" []"
+        return s!"instance : ToNeo4j {declNameStr} where\n  toRepr _ := .node \"{declNameStr}\" [(\"name\", \"{declNameStr}\")]"
 
       -- Pattern 2: String-parameterized entity (all params String, 0 ctor args)
       if stringParamCount == indVal.numParams && indVal.numParams > 0 && ctorExplicitCount == 0 then
@@ -139,7 +140,7 @@ private def buildFromNeo4jCmd (indVal : InductiveVal) : MetaM String := do
 
       -- Pattern 1: Unit type
       if indVal.numParams == 0 && ctorExplicitCount == 0 then
-        return s!"instance : FromNeo4j {declNameStr} where\n  fromRepr\n    | .node \"{declNameStr}\" [] => some .mk\n    | _ => none"
+        return s!"instance : FromNeo4j {declNameStr} where\n  fromRepr\n    | .node \"{declNameStr}\" _ => some .mk\n    | _ => none"
 
       -- Pattern 2: String-parameterized entity
       if stringParamCount == indVal.numParams && indVal.numParams > 0 && ctorExplicitCount == 0 then

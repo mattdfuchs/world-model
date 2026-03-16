@@ -2,6 +2,8 @@ MERGE (n:Human {name: "Jose"});
 MERGE (n:Human {name: "Rick"});
 MERGE (n:Human {name: "Allen"});
 MERGE (n:Human {name: "Matthew"});
+MERGE (n:Human {name: "Jean"});
+MERGE (n:Human {name: "George"});
 MERGE (n:Language {name: "English"});
 MERGE (n:Language {name: "Spanish"});
 MERGE (n:Language {name: "French"});
@@ -15,15 +17,16 @@ MERGE (n:Clinic {name: "ParisClinic"});
 MERGE (n:Clinic {name: "LondonClinic"});
 MERGE (n:ClinicalTrial {name: "OurTrial"});
 MERGE (n:Room {name: "Room3"});
+MERGE (n:Room {name: "Room7"});
+MERGE (n:ExamBedQual {name: "ExamBedQual"});
+MERGE (n:BPMonitorQual {name: "BPMonitorQual"});
+MERGE (n:VO2EquipmentQual {name: "VO2EquipmentQual"});
 MERGE (n:Role {name: "Patient"});
 MERGE (n:Role {name: "Administrator"});
 MERGE (n:Role {name: "Clinician"});
-MERGE (n:ExamBed);
-MERGE (n:BPMonitor);
-MERGE (n:VO2Equipment);
-MERGE (n:ExamBedQual);
-MERGE (n:BPMonitorQual);
-MERGE (n:VO2EquipmentQual);
+MERGE (n:ExamBed {name: "ExamBed"});
+MERGE (n:BPMonitor {name: "BPMonitor"});
+MERGE (n:VO2Equipment {name: "VO2Equipment"});
 MATCH (a:Human {name: "Jose"})
 MATCH (b:Role {name: "Patient"})
 MERGE (a)-[:hasRole]->(b);
@@ -35,6 +38,12 @@ MATCH (b:Role {name: "Clinician"})
 MERGE (a)-[:hasRole]->(b);
 MATCH (a:Human {name: "Matthew"})
 MATCH (b:Role {name: "Clinician"})
+MERGE (a)-[:hasRole]->(b);
+MATCH (a:Human {name: "Jean"})
+MATCH (b:Role {name: "Patient"})
+MERGE (a)-[:hasRole]->(b);
+MATCH (a:Human {name: "George"})
+MATCH (b:Role {name: "Patient"})
 MERGE (a)-[:hasRole]->(b);
 MATCH (a:Human {name: "Jose"})
 MATCH (b:Language {name: "Spanish"})
@@ -54,8 +63,20 @@ MERGE (a)-[:speaks]->(b);
 MATCH (a:Human {name: "Matthew"})
 MATCH (b:Language {name: "French"})
 MERGE (a)-[:speaks]->(b);
+MATCH (a:Human {name: "Jean"})
+MATCH (b:Language {name: "French"})
+MERGE (a)-[:speaks]->(b);
+MATCH (a:Human {name: "George"})
+MATCH (b:Language {name: "English"})
+MERGE (a)-[:speaks]->(b);
 MATCH (a:Human {name: "Jose"})
 MATCH (b:City {name: "Valencia"})
+MERGE (a)-[:lives]->(b);
+MATCH (a:Human {name: "Jean"})
+MATCH (b:City {name: "Paris"})
+MERGE (a)-[:lives]->(b);
+MATCH (a:Human {name: "George"})
+MATCH (b:City {name: "London"})
 MERGE (a)-[:lives]->(b);
 MATCH (a:Human {name: "Rick"})
 MATCH (b:Clinic {name: "LondonClinic"})
@@ -65,6 +86,9 @@ MATCH (b:Clinic {name: "ValClinic"})
 MERGE (a)-[:assigned]->(b);
 MATCH (a:Human {name: "Matthew"})
 MATCH (b:Clinic {name: "NiceClinic"})
+MERGE (a)-[:assigned]->(b);
+MATCH (a:Human {name: "Matthew"})
+MATCH (b:Clinic {name: "ParisClinic"})
 MERGE (a)-[:assigned]->(b);
 MATCH (a:Clinic {name: "ValClinic"})
 MATCH (b:City {name: "Valencia"})
@@ -81,8 +105,14 @@ MERGE (a)-[:isIn]->(b);
 MATCH (a:ClinicalTrial {name: "OurTrial"})
 MATCH (b:Clinic {name: "ValClinic"})
 MERGE (a)-[:trialApproves]->(b);
+MATCH (a:ClinicalTrial {name: "OurTrial"})
+MATCH (b:Clinic {name: "ParisClinic"})
+MERGE (a)-[:trialApproves]->(b);
 MATCH (a:Clinic {name: "ValClinic"})
 MATCH (b:Room {name: "Room3"})
+MERGE (a)-[:clinicHasRoom]->(b);
+MATCH (a:Clinic {name: "ParisClinic"})
+MATCH (b:Room {name: "Room7"})
 MERGE (a)-[:clinicHasRoom]->(b);
 MATCH (a:Room {name: "Room3"})
 MATCH (b:ExamBed)
@@ -91,6 +121,15 @@ MATCH (a:Room {name: "Room3"})
 MATCH (b:BPMonitor)
 MERGE (a)-[:roomHasBPMonitor]->(b);
 MATCH (a:Room {name: "Room3"})
+MATCH (b:VO2Equipment)
+MERGE (a)-[:roomHasVO2Equip]->(b);
+MATCH (a:Room {name: "Room7"})
+MATCH (b:ExamBed)
+MERGE (a)-[:roomHasExamBed]->(b);
+MATCH (a:Room {name: "Room7"})
+MATCH (b:BPMonitor)
+MERGE (a)-[:roomHasBPMonitor]->(b);
+MATCH (a:Room {name: "Room7"})
 MATCH (b:VO2Equipment)
 MERGE (a)-[:roomHasVO2Equip]->(b);
 MATCH (a:Human {name: "Allen"})
@@ -261,32 +300,3 @@ MERGE (a)-[:PRODUCES]->(b);
 MATCH (a:ActionSpec {name: "disqualify"})
 MATCH (b:NonQualifying)
 MERGE (a)-[:PRODUCES]->(b);
-MERGE (n:Human {name: "Jean"});
-MATCH (a:Human {name: "Jean"})
-MATCH (b:Role {name: "Patient"})
-MERGE (a)-[:hasRole]->(b);
-MATCH (a:Human {name: "Jean"})
-MATCH (b:Language {name: "French"})
-MERGE (a)-[:speaks]->(b);
-MATCH (a:Human {name: "Jean"})
-MATCH (b:City {name: "Paris"})
-MERGE (a)-[:lives]->(b);
-MATCH (a:ClinicalTrial {name: "OurTrial"})
-MATCH (b:Clinic {name: "ParisClinic"})
-MERGE (a)-[:trialApproves]->(b);
-MATCH (a:Human {name: "Matthew"})
-MATCH (b:Clinic {name: "ParisClinic"})
-MERGE (a)-[:assigned]->(b);
-MERGE (n:Room {name: "Room7"});
-MATCH (a:Clinic {name: "ParisClinic"})
-MATCH (b:Room {name: "Room7"})
-MERGE (a)-[:clinicHasRoom]->(b);
-MATCH (a:Room {name: "Room7"})
-MATCH (b:ExamBed)
-MERGE (a)-[:roomHasExamBed]->(b);
-MATCH (a:Room {name: "Room7"})
-MATCH (b:BPMonitor)
-MERGE (a)-[:roomHasBPMonitor]->(b);
-MATCH (a:Room {name: "Room7"})
-MATCH (b:VO2Equipment)
-MERGE (a)-[:roomHasVO2Equip]->(b);
