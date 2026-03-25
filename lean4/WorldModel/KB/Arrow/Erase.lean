@@ -34,13 +34,13 @@ def eraseArrow : Arrow Γ Δ → Pipeline
   | .swap          => .noop
 
 /-- Erase proof content from a SheetDiagram, keeping structure and labels. -/
-def erase : SheetDiagram Γ Δs → Pipeline
-  | .arrow a           => eraseArrow a
-  | .pipe a s          => .seq (eraseArrow a) (erase s)
-  | .branch _ _ _ l r  => .branch (erase l) (erase r)
-  | .join s            => .join (erase s)
-  | .halt              => .halt
-  | .scope label _ s   => .scope label (erase s)
+def erase : SheetDiagram st Γ Δs → Pipeline
+  | .arrow a                  => eraseArrow a
+  | .pipe a s                 => .seq (eraseArrow a) (erase s)
+  | .branch _ _ _ l r         => .branch (erase l) (erase r)
+  | .join s                   => .join (erase s)
+  | .halt                     => .halt
+  | .scope label _ _ _ _ s    => .scope label (erase s)
 
 /-- The clinical pipeline with all proof content erased. -/
 def clinicalPipeline : Pipeline := erase JoseExample.scopedClinicalPipeline
