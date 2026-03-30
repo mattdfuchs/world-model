@@ -39,6 +39,7 @@ inductive Arrow : Ctx → Ctx → Type 1 where
   | par  : Arrow Γ₁ Δ₁ → Arrow Γ₂ Δ₂ → Arrow (Γ₁ ++ Γ₂) (Δ₁ ++ Δ₂)
   | id   : Arrow Γ Γ
   | swap : Arrow (Γ₁ ++ Γ₂) (Γ₂ ++ Γ₁)
+  | drop : Split Γ dropped kept → Arrow Γ kept
 
 /-- Build an arrow from flat input/output lists and a satisfaction proof. -/
 def mkArrow {Γ : Ctx} (name : String) (inputs produces : Ctx)

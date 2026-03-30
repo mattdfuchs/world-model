@@ -42,6 +42,20 @@ inductive AssessmentResult (name : String) where
   | success : Patient name → String → Int → Rat → Int → AssessmentResult name
   | failure : Patient name → String → AssessmentResult name
 
+-- ── Rig-indexed and dependent domain types ────────────────────────────────
+
+/-- A vial with `n` doses remaining.  Rig-indexed: `Vial 2 ≠ Vial 1` at the type level. -/
+inductive Vial : Nat → Type where
+  | mk : (n : Nat) → Vial n
+
+/-- A drug dose drawn for a specific patient.  `DrugDose "Jose" ≠ DrugDose "Maria"`. -/
+inductive DrugDose : String → Type where
+  | mk : (patient : String) → DrugDose patient
+
+/-- Record that a dose was administered to a specific patient. -/
+inductive AdminRecord : String → Type where
+  | mk : (patient : String) → AdminRecord patient
+
 -- ── Evidence types ──────────────────────────────────────────────────────────
 
 /-- Proof that a clinician and patient share a language.
@@ -371,18 +385,18 @@ abbrev roomObligations : List Type :=
       - Room: holdsExamBedQual, holdsBPMonitorQual, holdsVO2EquipmentQual
 
     Four branch points (consent, heart, BP, VO2), three `.join`s. -/
-def scopedClinicalPipeline : SheetDiagram initState joseCtx
+def scopedClinicalPipeline : SheetDiagram initState joseCtx initState
     [[Patient "Jose", NonQualifying "Jose"],
      joseCtx ++ [ConsentGiven "Jose", HeartRate "Jose",
                   BloodPressure "Jose", VO2Max "Jose",
                   ProductsOutput "Jose", AssessmentResult "Jose"]] :=
-  .scope "trial" trialItems trialExt
+  .scope "trial" trialItems trialExt trialExt initState
     trialObligations
     PUnit.unit
-    (.scope "clinic" clinicItems clinicExt
+    (.scope "clinic" clinicItems clinicExt clinicExt (trialItems ++ initState)
       clinicObligations
       (valClinicJoseCityEvidence, allen_assigned_val, trial_approves_val, allenJoseLangEvidence)
-      (.scope "room" roomItems roomExt
+      (.scope "room" roomItems roomExt roomExt (clinicItems ++ (trialItems ++ initState))
         roomObligations
         (allen_holds_exambed, allen_holds_bpmonitor, allen_holds_vo2equip)
         (.join (.join (.join
@@ -450,3 +464,212 @@ abbrev clinicObligations : List Type :=
 --   lives (Human.mk "George") (City.mk city)
 
 end GeorgeExample
+
+-- ── Drug dose example: Allen with vial, Jose and Maria ──────────────────────
+
+namespace DrugExample
+
+open KB.Facts
+
+-- ── Evidence ────────────────────────────────────────────────────────────────
+
+def allenJoseLangEvidence : SharedLangEvidence "Allen" "Jose" :=
+  { lang := "Spanish", cSpeaks := allen_speaks_spanish, pSpeaks := jose_speaks_spanish }
+
+def valClinicJoseCityEvidence : ClinicCityEvidence "ValClinic" "Jose" :=
+  { city := "Valencia", cIsIn := valClinic_in_valencia, pLives := jose_lives_valencia }
+
+-- ── Scope state and context ───────────────────────────────────────────────
+
+/-- Initial state: two patients. -/
+abbrev initState : ScopeState :=
+  [.entry ⟨"Jose", .patient⟩, .entry ⟨"Maria", .patient⟩]
+
+/-- Starting context: clinician Allen + two patients. -/
+abbrev drugCtx : Ctx := [Clinician "Allen", Patient "Jose", Patient "Maria"]
+
+-- ── Trial / Clinic scope items (same as JoseExample) ────────────────────────
+
+abbrev trialItems : List ScopeItem :=
+  [.entry ⟨"OurTrial", .trial⟩,
+   .constraint .clinicianSpeaksPatient]
+
+abbrev clinicItems : List ScopeItem :=
+  [.entry ⟨"ValClinic", .clinic⟩,
+   .entry ⟨"Allen", .clinician⟩,
+   .constraint .clinicInPatientCity,
+   .constraint .clinicianAssigned,
+   .constraint .trialApprovesClinic]
+
+abbrev trialExt : Ctx := [ClinicalTrial "OurTrial"]
+abbrev clinicExt : Ctx := [Clinic "ValClinic"]
+
+-- ── Obligation types ──────────────────────────────────────────────────────
+
+abbrev trialObligations : List Type := []
+
+/-- Clinic obligations: clinicInPatientCity fires for both Jose and Maria.
+    clinicianAssigned and trialApprovesClinic fire for Allen/ValClinic.
+    clinicianSpeaksPatient (from trial) fires for Allen × {Jose, Maria}. -/
+abbrev clinicObligations : List Type :=
+  [ClinicCityEvidence "ValClinic" "Jose",
+   ClinicCityEvidence "ValClinic" "Maria",
+   assigned (Human.mk "Allen") (Clinic.mk "ValClinic"),
+   trialApproves (ClinicalTrial.mk "OurTrial") (Clinic.mk "ValClinic"),
+   SharedLangEvidence "Allen" "Jose",
+   SharedLangEvidence "Allen" "Maria"]
+
+/-- Evidence that ValClinic is in Valencia where Maria lives.
+    (For this example we assume Maria also lives in Valencia.) -/
+axiom maria_lives_valencia : lives (Human.mk "Maria") (City.mk "Valencia")
+axiom maria_speaks_spanish : speaks (Human.mk "Maria") (Language.mk "Spanish")
+
+noncomputable def valClinicMariaCityEvidence : ClinicCityEvidence "ValClinic" "Maria" :=
+  { city := "Valencia", cIsIn := valClinic_in_valencia, pLives := maria_lives_valencia }
+
+noncomputable def allenMariaLangEvidence : SharedLangEvidence "Allen" "Maria" :=
+  { lang := "Spanish", cSpeaks := allen_speaks_spanish, pSpeaks := maria_speaks_spanish }
+
+-- ── Inside clinic context ───────────────────────────────────────────────────
+
+/-- Context inside trial + clinic scopes (no room scope in drug scenario).
+    Index  Type
+    0      Clinic "ValClinic"
+    1      ClinicalTrial "OurTrial"
+    2      Clinician "Allen"
+    3      Patient "Jose"
+    4      Patient "Maria" -/
+abbrev insideClinic : Ctx :=
+  clinicExt ++ (trialExt ++ drugCtx)
+
+abbrev clinicState : ScopeState :=
+  clinicItems ++ (trialItems ++ initState)
+
+-- ── Supply room scope items ─────────────────────────────────────────────────
+
+abbrev supplyRoomItems : List ScopeItem :=
+  [.entry ⟨"SupplyRoom", .room⟩,
+   .entry ⟨"Vial", .vial⟩]
+
+abbrev supplyRoomObligations : List Type := []
+
+-- ── Abbreviations for accumulated contexts ────────────────────────────────
+
+abbrev Γ₀ : Ctx := insideClinic
+abbrev Γ₁ : Ctx := insideClinic ++ [AdminRecord "Jose"]
+abbrev Γ₂ : Ctx := insideClinic ++ [AdminRecord "Jose", AdminRecord "Maria"]
+
+-- ── Supply room visit 1: draw dose for Jose ─────────────────────────────────
+-- Inner context: [Vial 2] ++ Γ₀.  Draw produces DrugDose "Jose" + Vial 1,
+-- drop stale Vial 2, rearrange to [Vial 1, DrugDose "Jose"] ++ Γ₀.
+
+def drawDoseJose : Arrow ([Vial 2] ++ Γ₀) (([Vial 2] ++ Γ₀) ++ [DrugDose "Jose", Vial 1]) :=
+  mkArrow "drawDoseJose" [Vial 2] [DrugDose "Jose", Vial 1]
+    (.bind (Vial.mk 2) (by elem_tac) .nil)
+
+def dropVial2 : Split (([Vial 2] ++ Γ₀) ++ [DrugDose "Jose", Vial 1])
+                       [Vial 2] (Γ₀ ++ [DrugDose "Jose", Vial 1]) :=
+  .left (Split.idRight (Γ₀ ++ [DrugDose "Jose", Vial 1]))
+
+def reorderJose : Arrow ([DrugDose "Jose", Vial 1] ++ Γ₀)
+    ([Vial 1, DrugDose "Jose"] ++ Γ₀) :=
+  Arrow.par (Arrow.swap (Γ₁ := [DrugDose "Jose"]) (Γ₂ := [Vial 1])) (Arrow.id (Γ := Γ₀))
+
+def supplyVisit1 : SheetDiagram clinicState Γ₀ clinicState
+    [[DrugDose "Jose"] ++ Γ₀] :=
+  .scope "supply-room" supplyRoomItems [Vial 2] [Vial 1] clinicState
+    supplyRoomObligations PUnit.unit
+    (.pipe drawDoseJose
+      (.pipe (.drop dropVial2)
+        (.pipe (Arrow.swap (Γ₁ := Γ₀) (Γ₂ := [DrugDose "Jose", Vial 1]))
+          (.arrow reorderJose))))
+
+-- ── Administer dose to Jose ──────────────────────────────────────────────────
+
+abbrev afterSupply1 : Ctx := [DrugDose "Jose"] ++ Γ₀
+
+def administerJose : Arrow afterSupply1 (afterSupply1 ++ [AdminRecord "Jose"]) :=
+  mkArrow "administerJose" [DrugDose "Jose", Patient "Jose"] [AdminRecord "Jose"]
+    (.bind (DrugDose.mk "Jose") (by elem_tac)
+      (.bind (Patient.mk "Jose") (by elem_tac) .nil))
+
+def dropUsedDoseJose : Split (afterSupply1 ++ [AdminRecord "Jose"])
+                              [DrugDose "Jose"] Γ₁ :=
+  .left (Split.idRight Γ₁)
+
+-- ── Supply room visit 2: draw dose for Maria ────────────────────────────────
+-- Inner context: [Vial 1] ++ Γ₁.
+
+def drawDoseMaria : Arrow ([Vial 1] ++ Γ₁) (([Vial 1] ++ Γ₁) ++ [DrugDose "Maria", Vial 0]) :=
+  mkArrow "drawDoseMaria" [Vial 1] [DrugDose "Maria", Vial 0]
+    (.bind (Vial.mk 1) (by elem_tac) .nil)
+
+def dropVial1 : Split (([Vial 1] ++ Γ₁) ++ [DrugDose "Maria", Vial 0])
+                       [Vial 1] (Γ₁ ++ [DrugDose "Maria", Vial 0]) :=
+  .left (Split.idRight (Γ₁ ++ [DrugDose "Maria", Vial 0]))
+
+def reorderMaria : Arrow ([DrugDose "Maria", Vial 0] ++ Γ₁)
+    ([Vial 0, DrugDose "Maria"] ++ Γ₁) :=
+  Arrow.par (Arrow.swap (Γ₁ := [DrugDose "Maria"]) (Γ₂ := [Vial 0])) (Arrow.id (Γ := Γ₁))
+
+def supplyVisit2 : SheetDiagram clinicState Γ₁ clinicState
+    [[DrugDose "Maria"] ++ Γ₁] :=
+  .scope "supply-room" supplyRoomItems [Vial 1] [Vial 0] clinicState
+    supplyRoomObligations PUnit.unit
+    (.pipe drawDoseMaria
+      (.pipe (.drop dropVial1)
+        (.pipe (Arrow.swap (Γ₁ := Γ₁) (Γ₂ := [DrugDose "Maria", Vial 0]))
+          (.arrow reorderMaria))))
+
+-- ── Administer dose to Maria ─────────────────────────────────────────────────
+
+abbrev afterSupply2 : Ctx := [DrugDose "Maria"] ++ Γ₁
+
+def administerMaria : Arrow afterSupply2 (afterSupply2 ++ [AdminRecord "Maria"]) :=
+  mkArrow "administerMaria" [DrugDose "Maria", Patient "Maria"] [AdminRecord "Maria"]
+    (.bind (DrugDose.mk "Maria") (by elem_tac)
+      (.bind (Patient.mk "Maria") (by elem_tac) .nil))
+
+def dropUsedDoseMaria : Split (afterSupply2 ++ [AdminRecord "Maria"])
+                               [DrugDose "Maria"] Γ₂ :=
+  .left (Split.idRight Γ₂)
+
+-- ── Supply room visit 3: discard empty vial ─────────────────────────────────
+-- Inner context: [Vial 0] ++ Γ₂.  Drop Vial 0, kept=[] (nothing reclaimed).
+
+def dropEmptyVial : Split ([Vial 0] ++ Γ₂) [Vial 0] Γ₂ :=
+  .left (Split.idRight Γ₂)
+
+def supplyVisit3 : SheetDiagram clinicState Γ₂ clinicState [Γ₂] :=
+  .scope "supply-room" supplyRoomItems [Vial 0] ([] : Ctx) clinicState
+    supplyRoomObligations PUnit.unit
+    (.arrow (.drop dropEmptyVial))
+
+-- ── Full drug pipeline ──────────────────────────────────────────────────────
+
+/-- The complete two-patient drug administration pipeline:
+    1. Supply room visit 1: draw dose for Jose (Vial 2 → Vial 1)
+    2. Administer to Jose, drop used dose
+    3. Supply room visit 2: draw dose for Maria (Vial 1 → Vial 0)
+    4. Administer to Maria, drop used dose
+    5. Supply room visit 3: discard empty vial -/
+def drugPipeline : SheetDiagram clinicState Γ₀ clinicState [Γ₂] :=
+  .seq supplyVisit1
+    (.seq (.arrow (administerJose ⟫ .drop dropUsedDoseJose))
+      (.seq supplyVisit2
+        (.seq (.arrow (administerMaria ⟫ .drop dropUsedDoseMaria))
+          supplyVisit3)))
+
+/-- The full pipeline with trial + clinic scopes wrapping the drug pipeline. -/
+noncomputable def fullDrugPipeline : SheetDiagram initState drugCtx initState
+    [drugCtx ++ [AdminRecord "Jose", AdminRecord "Maria"]] :=
+  .scope "trial" trialItems trialExt trialExt initState
+    trialObligations PUnit.unit
+    (.scope "clinic" clinicItems clinicExt clinicExt (trialItems ++ initState)
+      clinicObligations
+      (valClinicJoseCityEvidence, valClinicMariaCityEvidence,
+       allen_assigned_val, trial_approves_val,
+       allenJoseLangEvidence, allenMariaLangEvidence)
+      drugPipeline)
+
+end DrugExample

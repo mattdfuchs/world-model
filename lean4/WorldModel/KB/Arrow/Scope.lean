@@ -15,6 +15,7 @@ inductive Tag where
   | examBed | bpMonitor | vo2Equipment
   | patient | clinician
   | examBedTech | bpTech | vo2Tech
+  | vial | drugDose
   deriving DecidableEq, Repr
 
 -- ── Scope entries ───────────────────────────────────────────────────────────
