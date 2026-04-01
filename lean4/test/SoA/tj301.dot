@@ -1,0 +1,167 @@
+digraph TJ301SoA {
+  rankdir=LR
+  fontname="Helvetica"
+  node [fontname="Helvetica", fontsize=9, margin="0.1,0.05"]
+  edge [fontname="Helvetica", fontsize=8]
+  newrank=true
+  compound=true
+  splines=polyline
+
+  // ── Run-in ──────────────────────────────────────────────────────────
+  subgraph cluster_runIn {
+    label="Run-in Visit\nD-42"
+    labeljust=l
+    style="rounded,filled"
+    fillcolor="#E8F0FE"
+    color="#5B7DB1"
+    fontsize=10
+    fontcolor="#333333"
+
+    runIn_anchor [label="", shape=point, width=0.15]
+  }
+
+  // ── Screening ───────────────────────────────────────────────────────
+  subgraph cluster_screening {
+    label="Screening Visit\nD-28 (±0/+27)\n8 activities"
+    labeljust=l
+    style="rounded,filled"
+    fillcolor="#E8F0FE"
+    color="#5B7DB1"
+    fontsize=10
+    fontcolor="#333333"
+
+    screening_anchor [label="", shape=point, width=0.15]
+  }
+
+  // ── Baseline ────────────────────────────────────────────────────────
+  subgraph cluster_baseline {
+    label="Randomisation /\nBaseline\nD0\n6 activities"
+    labeljust=l
+    style="rounded,filled"
+    fillcolor="#E0F7FA"
+    color="#00838F"
+    fontsize=10
+    fontcolor="#333333"
+
+    baseline_anchor [label="", shape=point, width=0.15]
+  }
+
+  // ── Treatment visits (Q2W infusions) ────────────────────────────────
+  subgraph cluster_visit3 {
+    label="Visit 3 (Wk 2)\nD14 (±3)\n6 activities"
+    labeljust=l
+    style="rounded,filled"
+    fillcolor="#FFF3E0"
+    color="#E65100"
+    fontsize=10
+    fontcolor="#333333"
+
+    visit3_anchor [label="", shape=point, width=0.15]
+  }
+
+  subgraph cluster_visit4 {
+    label="Visit 4 (Wk 4)\nD28 (±3)\n5 activities"
+    labeljust=l
+    style="rounded,filled"
+    fillcolor="#FFF3E0"
+    color="#E65100"
+    fontsize=10
+    fontcolor="#333333"
+
+    visit4_anchor [label="", shape=point, width=0.15]
+  }
+
+  subgraph cluster_visit5 {
+    label="Visit 5 (Wk 6)\nD42 (±3)\n5 activities"
+    labeljust=l
+    style="rounded,filled"
+    fillcolor="#FFF3E0"
+    color="#E65100"
+    fontsize=10
+    fontcolor="#333333"
+
+    visit5_anchor [label="", shape=point, width=0.15]
+  }
+
+  subgraph cluster_visit6 {
+    label="Visit 6 (Wk 8)\nD56 (±3)\n6 activities"
+    labeljust=l
+    style="rounded,filled"
+    fillcolor="#FFF3E0"
+    color="#E65100"
+    fontsize=10
+    fontcolor="#333333"
+
+    visit6_anchor [label="", shape=point, width=0.15]
+  }
+
+  subgraph cluster_visit7 {
+    label="Visit 7 (Wk 10)\nD70 (±3)\n5 activities"
+    labeljust=l
+    style="rounded,filled"
+    fillcolor="#FFF3E0"
+    color="#E65100"
+    fontsize=10
+    fontcolor="#333333"
+
+    visit7_anchor [label="", shape=point, width=0.15]
+  }
+
+  // ── End of Treatment ───────────────────────────────────────────────
+  subgraph cluster_eot {
+    label="End of Treatment\n(Wk 12)\nD84 (±3)\n7 activities"
+    labeljust=l
+    style="rounded,filled"
+    fillcolor="#FCE4EC"
+    color="#C62828"
+    fontsize=10
+    fontcolor="#333333"
+
+    eot_anchor [label="", shape=point, width=0.15]
+  }
+
+  // ── Safety Follow-up ───────────────────────────────────────────────
+  subgraph cluster_followUp {
+    label="Safety Follow-up\n(Wk 15)\nD105 (±5)\n3 activities"
+    labeljust=l
+    style="rounded,filled"
+    fillcolor="#E8F5E9"
+    color="#2E7D32"
+    fontsize=10
+    fontcolor="#333333"
+
+    followUp_anchor [label="", shape=point, width=0.15]
+  }
+
+  // ── Follows edges ───────────────────────────────────────────────────
+  edge [color="#333333", penwidth=1.8, arrowsize=0.8]
+
+  runIn_anchor -> screening_anchor [ltail=cluster_runIn, lhead=cluster_screening]
+  screening_anchor -> baseline_anchor [ltail=cluster_screening, lhead=cluster_baseline, label="1-28d"]
+  baseline_anchor -> visit3_anchor [ltail=cluster_baseline, lhead=cluster_visit3, label="Q2W"]
+  visit3_anchor -> visit4_anchor [ltail=cluster_visit3, lhead=cluster_visit4, label="Q2W"]
+  visit4_anchor -> visit5_anchor [ltail=cluster_visit4, lhead=cluster_visit5, label="Q2W"]
+  visit5_anchor -> visit6_anchor [ltail=cluster_visit5, lhead=cluster_visit6, label="Q2W"]
+  visit6_anchor -> visit7_anchor [ltail=cluster_visit6, lhead=cluster_visit7, label="Q2W"]
+  visit7_anchor -> eot_anchor [ltail=cluster_visit7, lhead=cluster_eot, label="Q2W"]
+  eot_anchor -> followUp_anchor [ltail=cluster_eot, lhead=cluster_followUp, label="16-26d"]
+
+  // ── Legend ──────────────────────────────────────────────────────────
+  subgraph cluster_legend {
+    label="Legend"
+    fontsize=9
+    style="rounded,filled"
+    fillcolor="#F5F5F5"
+    color="#CCCCCC"
+    node [fontsize=8, width=1.6, height=0.25]
+    edge [style=invis]
+
+    leg_screen [label="Screening", shape=box, style="rounded,filled", fillcolor="#E8F0FE", color="#5B7DB1"]
+    leg_base [label="Baseline / Randomisation", shape=box, style="rounded,filled", fillcolor="#E0F7FA", color="#00838F"]
+    leg_treat [label="Treatment (Q2W infusion)", shape=box, style="rounded,filled", fillcolor="#FFF3E0", color="#E65100"]
+    leg_eot [label="End of Treatment", shape=box, style="rounded,filled", fillcolor="#FCE4EC", color="#C62828"]
+    leg_fu [label="Follow-up", shape=box, style="rounded,filled", fillcolor="#E8F5E9", color="#2E7D32"]
+
+    leg_screen -> leg_base -> leg_treat -> leg_eot -> leg_fu
+  }
+}

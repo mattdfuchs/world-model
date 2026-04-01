@@ -6,3 +6,5 @@ import WorldModel.KB.Arrow.Scope
 import WorldModel.KB.Arrow.SheetDiagram
 import WorldModel.KB.Arrow.Clinical
 import WorldModel.KB.Arrow.Erase
+import WorldModel.KB.Arrow.Resource
+import WorldModel.KB.Arrow.Obligation

@@ -6,3 +6,4 @@ import WorldModel.KB.Boxes
 import WorldModel.KB.Arrow
 import WorldModel.KB.Neo4j
 import WorldModel.KB.ActionCatalog
+import WorldModel.KB.SoA

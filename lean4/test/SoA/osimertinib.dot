@@ -1,0 +1,146 @@
+digraph OsimertinibSoA {
+  rankdir=LR
+  fontname="Helvetica"
+  node [fontname="Helvetica", fontsize=9, margin="0.1,0.05"]
+  edge [fontname="Helvetica", fontsize=8]
+  newrank=true
+  compound=true
+  splines=polyline
+
+  // ── Screening ───────────────────────────────────────────────────────
+  subgraph cluster_screening {
+    label="Screening\nD-28 (±0/+27)\n20 activities"
+    labeljust=l
+    style="rounded,filled"
+    fillcolor="#E8F0FE"
+    color="#5B7DB1"
+    fontsize=10
+    fontcolor="#333333"
+
+    screening_anchor [label="", shape=point, width=0.15]
+  }
+
+  // ── Cycle 1 Day 1 ──────────────────────────────────────────────────
+  subgraph cluster_c1d1 {
+    label="Cycle 1 Day 1\nD0\n10 activities"
+    labeljust=l
+    style="rounded,filled"
+    fillcolor="#E8F0FE"
+    color="#5B7DB1"
+    fontsize=10
+    fontcolor="#333333"
+
+    c1d1_anchor [label="", shape=point, width=0.15]
+  }
+
+  // ── Treatment Cycle (ν-stream) ─────────────────────────────────────
+  subgraph cluster_treatmentCycle {
+    label="Treatment Cycle (C2D1+)\nν: Q21d → progression\n11 activities"
+    labeljust=l
+    style="rounded,bold,filled"
+    fillcolor="#FFF3E0"
+    color="#E65100"
+    penwidth=2
+    fontsize=10
+    fontcolor="#333333"
+
+    treatment_anchor [label="", shape=point, width=0.15]
+  }
+
+  // ── Imaging Cycle (ν-stream) ───────────────────────────────────────
+  subgraph cluster_imagingCycle {
+    label="Imaging Assessment\nν: Q42d → progression\n6 activities"
+    labeljust=l
+    style="rounded,bold,filled"
+    fillcolor="#FFF3E0"
+    color="#E65100"
+    penwidth=2
+    fontsize=10
+    fontcolor="#333333"
+
+    imaging_anchor [label="", shape=point, width=0.15]
+  }
+
+  // ── IP Discontinuation ─────────────────────────────────────────────
+  subgraph cluster_discontinuation {
+    label="IP Discontinuation /\nWithdrawal\nevent-triggered\n8 activities"
+    labeljust=l
+    style="rounded,filled"
+    fillcolor="#FCE4EC"
+    color="#C62828"
+    fontsize=10
+    fontcolor="#333333"
+
+    discont_anchor [label="", shape=point, width=0.15]
+  }
+
+  // ── 28-day Follow-up ───────────────────────────────────────────────
+  subgraph cluster_day28fu {
+    label="28-day Follow-up\nD28 from discont."
+    labeljust=l
+    style="rounded,filled"
+    fillcolor="#E8F5E9"
+    color="#2E7D32"
+    fontsize=10
+    fontcolor="#333333"
+
+    day28fu_anchor [label="", shape=point, width=0.15]
+  }
+
+  // ── Progression Follow-up (ν-stream) ───────────────────────────────
+  subgraph cluster_progressionFU {
+    label="Progression Follow-up\nν: Q42d → end of study\n7 activities"
+    labeljust=l
+    style="rounded,bold,filled"
+    fillcolor="#FFF3E0"
+    color="#E65100"
+    penwidth=2
+    fontsize=10
+    fontcolor="#333333"
+
+    progressionFU_anchor [label="", shape=point, width=0.15]
+  }
+
+  // ── Survival Follow-up (ν-stream) ──────────────────────────────────
+  subgraph cluster_survivalFU {
+    label="Survival Follow-up\n(phone)\nν: Q42d → withdrawal\n1 activity"
+    labeljust=l
+    style="rounded,bold,filled"
+    fillcolor="#FFF3E0"
+    color="#E65100"
+    penwidth=2
+    fontsize=10
+    fontcolor="#333333"
+
+    survivalFU_anchor [label="", shape=point, width=0.15]
+  }
+
+  // ── Follows edges ───────────────────────────────────────────────────
+  edge [color="#333333", penwidth=1.8, arrowsize=0.8]
+
+  screening_anchor -> c1d1_anchor [ltail=cluster_screening, lhead=cluster_c1d1, label="1-28d"]
+  c1d1_anchor -> treatment_anchor [ltail=cluster_c1d1, lhead=cluster_treatmentCycle, label="18-24d"]
+  c1d1_anchor -> imaging_anchor [ltail=cluster_c1d1, lhead=cluster_imagingCycle, label="39-49d"]
+  treatment_anchor -> discont_anchor [ltail=cluster_treatmentCycle, lhead=cluster_discontinuation, label="on progression", color="#CC0000", style=dashed]
+  imaging_anchor -> discont_anchor [ltail=cluster_imagingCycle, lhead=cluster_discontinuation, label="on progression", color="#CC0000", style=dashed]
+  discont_anchor -> day28fu_anchor [ltail=cluster_discontinuation, lhead=cluster_day28fu, label="25-31d"]
+  discont_anchor -> progressionFU_anchor [ltail=cluster_discontinuation, lhead=cluster_progressionFU]
+  progressionFU_anchor -> survivalFU_anchor [ltail=cluster_progressionFU, lhead=cluster_survivalFU]
+
+  // ── Legend ──────────────────────────────────────────────────────────
+  subgraph cluster_legend {
+    label="Legend"
+    fontsize=9
+    style="rounded,filled"
+    fillcolor="#F5F5F5"
+    color="#CCCCCC"
+    node [fontsize=8, width=1.4, height=0.25]
+    edge [style=invis]
+
+    leg_visit [label="One-shot visit", shape=box, style="rounded,filled", fillcolor="#E8F0FE", color="#5B7DB1"]
+    leg_stream [label="ν-stream (repeating)", shape=box, style="rounded,bold,filled", fillcolor="#FFF3E0", color="#E65100", penwidth=2]
+    leg_term [label="Termination event", shape=box, style="rounded,filled", fillcolor="#FCE4EC", color="#C62828"]
+
+    leg_visit -> leg_stream -> leg_term
+  }
+}
