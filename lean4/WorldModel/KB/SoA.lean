@@ -41,6 +41,7 @@ inductive TerminationCondition where
   | endOfStudy
   | progression
   | withdrawal
+  | death
   | fixed (count : Nat)
   deriving DecidableEq, Repr
 
@@ -213,5 +214,23 @@ def SoA.unknownActivities (soa : SoA) (catalogNames : List String) : List String
 /-- Check that every activity in the SoA has a corresponding entry in the catalog. -/
 def SoA.activitiesInCatalog (soa : SoA) (catalogNames : List String) : Bool :=
   soa.unknownActivities catalogNames |>.isEmpty
+
+-- ── Visit plan extraction ────────────────────────────────────────────────
+
+/-- A linearized visit plan extracted from a SoA.
+    Each entry represents a visit "slot" in topological order. -/
+structure VisitSlot where
+  interaction : InteractionNode
+  activities  : List (ActivityNode × CellValue)
+  deriving Repr
+
+/-- Extract a linearized visit plan from a SoA.
+    Orders interactions by nominal day (topological sort via timing).
+    Each slot carries its activities. -/
+def SoA.visitPlan (soa : SoA) : List VisitSlot :=
+  let sorted := soa.interactions.mergeSort
+    (fun a b => a.timing.nominalDay < b.timing.nominalDay)
+  sorted.map fun node =>
+    { interaction := node, activities := soa.activitiesAt node.id }
 
 -- Worked examples: see lean4/test/SoA/ (JoseTrial.lean, TJ301.lean, Osimertinib.lean)

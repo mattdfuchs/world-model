@@ -33,6 +33,7 @@ inductive ConstraintId where
   | clinicianAssigned
   | trialApprovesClinic
   | examBedQual | bpQual | vo2Qual
+  | callConfirmed
   deriving DecidableEq, Repr
 
 -- ── Scope items: entries + constraints on a single stack ────────────────────

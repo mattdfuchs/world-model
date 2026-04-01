@@ -56,6 +56,49 @@ inductive DrugDose : String → Type where
 inductive AdminRecord : String → Type where
   | mk : (patient : String) → AdminRecord patient
 
+-- ── Dual types (co-endpoints for conserved resources) ──────────────────────
+
+/-- Proof of patient presence at a location. Dual of `Patient`. -/
+inductive PatientPresence : String → Type where
+  | mk : (name : String) → PatientPresence name
+
+/-- Proof of clinician presence on-site. Dual of `Clinician`. -/
+inductive ClinicianPresence : String → Type where
+  | mk : (name : String) → ClinicianPresence name
+
+/-- Receipt for checked-out exam bed. Dual of `ExamBed`. -/
+inductive ExamBedReceipt : Type where | mk : ExamBedReceipt
+
+/-- Receipt for checked-out BP monitor. Dual of `BPMonitor`. -/
+inductive BPMonitorReceipt : Type where | mk : BPMonitorReceipt
+
+/-- Receipt for checked-out VO2 equipment. Dual of `VO2Equipment`. -/
+inductive VO2EquipmentReceipt : Type where | mk : VO2EquipmentReceipt
+
+/-- Reservation for a room. Dual of `Room`. -/
+inductive RoomReservation : String → Type where
+  | mk : (name : String) → RoomReservation name
+
+/-- Reservation for a clinic. Dual of `Clinic`. -/
+inductive ClinicReservation : String → Type where
+  | mk : (name : String) → ClinicReservation name
+
+/-- Enrollment in a trial. Dual of `ClinicalTrial`. -/
+inductive TrialEnrollment : String → Type where
+  | mk : (name : String) → TrialEnrollment name
+
+-- ── Obligation types (produced by arrow fission) ──────────────────────────
+
+/-- Obligation that a dose was delivered to a specific patient.
+    Produced when a dose is drawn from a vial (fission);
+    cancelled by `cap` with `AdminRecord`. -/
+inductive DoseObligation : String → Type where
+  | mk : (patient : String) → DoseObligation patient
+
+/-- Evidence that a confirmation call was made to a patient before a visit. -/
+inductive CallConfirmed : String → Type where
+  | mk : (patientName : String) → CallConfirmed patientName
+
 -- ── Evidence types ──────────────────────────────────────────────────────────
 
 /-- Proof that a clinician and patient share a language.
@@ -120,6 +163,9 @@ def interpretConstraint (cid : ConstraintId) (entries : List ScopeEntry) : List 
   | .vo2Qual =>
       (entries.filterMap fun e => if e.tag == .vo2Tech then some e.name else none).map fun n =>
         holdsVO2EquipmentQual (Human.mk n) .mk
+  | .callConfirmed =>
+      (entries.filterMap fun e => if e.tag == .patient then some e.name else none).map fun pn =>
+        CallConfirmed pn
 
 /-- Compute proof obligations that fire when `newItems` enter an existing `ScopeState`.
     - New constraints fire against ALL entries (existing + new)
@@ -553,40 +599,41 @@ abbrev supplyRoomItems : List ScopeItem :=
 
 abbrev supplyRoomObligations : List Type := []
 
--- ── Abbreviations for accumulated contexts ────────────────────────────────
+-- ── Abbreviations for contexts ────────────────────────────────────────────
 
 abbrev Γ₀ : Ctx := insideClinic
-abbrev Γ₁ : Ctx := insideClinic ++ [AdminRecord "Jose"]
-abbrev Γ₂ : Ctx := insideClinic ++ [AdminRecord "Jose", AdminRecord "Maria"]
 
 -- ── Supply room visit 1: draw dose for Jose ─────────────────────────────────
--- Inner context: [Vial 2] ++ Γ₀.  Draw produces DrugDose "Jose" + Vial 1,
--- drop stale Vial 2, rearrange to [Vial 1, DrugDose "Jose"] ++ Γ₀.
+-- Inner context: [Vial 2] ++ Γ₀.  Draw produces DrugDose + DoseObligation + Vial 1,
+-- drop stale Vial 2, rearrange to [Vial 1, DrugDose, DoseObligation] ++ Γ₀.
 
-def drawDoseJose : Arrow ([Vial 2] ++ Γ₀) (([Vial 2] ++ Γ₀) ++ [DrugDose "Jose", Vial 1]) :=
-  mkArrow "drawDoseJose" [Vial 2] [DrugDose "Jose", Vial 1]
+def drawDoseJose : Arrow ([Vial 2] ++ Γ₀)
+    (([Vial 2] ++ Γ₀) ++ [DrugDose "Jose", DoseObligation "Jose", Vial 1]) :=
+  mkArrow "drawDoseJose" [Vial 2] [DrugDose "Jose", DoseObligation "Jose", Vial 1]
     (.bind (Vial.mk 2) (by elem_tac) .nil)
 
-def dropVial2 : Split (([Vial 2] ++ Γ₀) ++ [DrugDose "Jose", Vial 1])
-                       [Vial 2] (Γ₀ ++ [DrugDose "Jose", Vial 1]) :=
-  .left (Split.idRight (Γ₀ ++ [DrugDose "Jose", Vial 1]))
+def dropVial2 : Split (([Vial 2] ++ Γ₀) ++ [DrugDose "Jose", DoseObligation "Jose", Vial 1])
+                       [Vial 2] (Γ₀ ++ [DrugDose "Jose", DoseObligation "Jose", Vial 1]) :=
+  .left (Split.idRight (Γ₀ ++ [DrugDose "Jose", DoseObligation "Jose", Vial 1]))
 
-def reorderJose : Arrow ([DrugDose "Jose", Vial 1] ++ Γ₀)
-    ([Vial 1, DrugDose "Jose"] ++ Γ₀) :=
-  Arrow.par (Arrow.swap (Γ₁ := [DrugDose "Jose"]) (Γ₂ := [Vial 1])) (Arrow.id (Γ := Γ₀))
+def reorderJose : Arrow ([DrugDose "Jose", DoseObligation "Jose", Vial 1] ++ Γ₀)
+    ([Vial 1, DrugDose "Jose", DoseObligation "Jose"] ++ Γ₀) :=
+  Arrow.par
+    (Arrow.swap (Γ₁ := [DrugDose "Jose", DoseObligation "Jose"]) (Γ₂ := [Vial 1]))
+    (Arrow.id (Γ := Γ₀))
 
 def supplyVisit1 : SheetDiagram clinicState Γ₀ clinicState
-    [[DrugDose "Jose"] ++ Γ₀] :=
+    [[DrugDose "Jose", DoseObligation "Jose"] ++ Γ₀] :=
   .scope "supply-room" supplyRoomItems [Vial 2] [Vial 1] clinicState
     supplyRoomObligations PUnit.unit
     (.pipe drawDoseJose
       (.pipe (.drop dropVial2)
-        (.pipe (Arrow.swap (Γ₁ := Γ₀) (Γ₂ := [DrugDose "Jose", Vial 1]))
+        (.pipe (Arrow.swap (Γ₁ := Γ₀) (Γ₂ := [DrugDose "Jose", DoseObligation "Jose", Vial 1]))
           (.arrow reorderJose))))
 
--- ── Administer dose to Jose ──────────────────────────────────────────────────
+-- ── Administer dose to Jose + cap ──────────────────────────────────────────
 
-abbrev afterSupply1 : Ctx := [DrugDose "Jose"] ++ Γ₀
+abbrev afterSupply1 : Ctx := [DrugDose "Jose", DoseObligation "Jose"] ++ Γ₀
 
 def administerJose : Arrow afterSupply1 (afterSupply1 ++ [AdminRecord "Jose"]) :=
   mkArrow "administerJose" [DrugDose "Jose", Patient "Jose"] [AdminRecord "Jose"]
@@ -594,36 +641,53 @@ def administerJose : Arrow afterSupply1 (afterSupply1 ++ [AdminRecord "Jose"]) :
       (.bind (Patient.mk "Jose") (by elem_tac) .nil))
 
 def dropUsedDoseJose : Split (afterSupply1 ++ [AdminRecord "Jose"])
-                              [DrugDose "Jose"] Γ₁ :=
-  .left (Split.idRight Γ₁)
+                              [DrugDose "Jose"]
+                              ([DoseObligation "Jose"] ++ Γ₀ ++ [AdminRecord "Jose"]) :=
+  .left (Split.idRight ([DoseObligation "Jose"] ++ Γ₀ ++ [AdminRecord "Jose"]))
+
+/-- Split for cap: extract DoseObligation and AdminRecord, leaving Γ₀.
+    Context order: [DoseObligation "Jose", ...Γ₀..., AdminRecord "Jose"]
+    DoseObligation → left, Γ₀ (5 items) → right, AdminRecord → left. -/
+def capSplitJose : Split ([DoseObligation "Jose"] ++ Γ₀ ++ [AdminRecord "Jose"])
+                          [DoseObligation "Jose", AdminRecord "Jose"] Γ₀ :=
+  .left (.right (.right (.right (.right (.right (.left .nil))))))
+
+/-- Dose cycle for Jose: administer, drop used dose, cap obligation with record.
+    Returns to Γ₀ (clean — no AdminRecords accumulate). -/
+def doseCycleJose : SheetDiagram clinicState afterSupply1 clinicState [Γ₀] :=
+  .seq (.arrow (administerJose ⟫ .drop dropUsedDoseJose))
+    (.cap "dose-delivered-jose" (DoseObligation "Jose") (AdminRecord "Jose") capSplitJose)
 
 -- ── Supply room visit 2: draw dose for Maria ────────────────────────────────
--- Inner context: [Vial 1] ++ Γ₁.
+-- Starts from Γ₀ (clean context after Jose's cap).
 
-def drawDoseMaria : Arrow ([Vial 1] ++ Γ₁) (([Vial 1] ++ Γ₁) ++ [DrugDose "Maria", Vial 0]) :=
-  mkArrow "drawDoseMaria" [Vial 1] [DrugDose "Maria", Vial 0]
+def drawDoseMaria : Arrow ([Vial 1] ++ Γ₀)
+    (([Vial 1] ++ Γ₀) ++ [DrugDose "Maria", DoseObligation "Maria", Vial 0]) :=
+  mkArrow "drawDoseMaria" [Vial 1] [DrugDose "Maria", DoseObligation "Maria", Vial 0]
     (.bind (Vial.mk 1) (by elem_tac) .nil)
 
-def dropVial1 : Split (([Vial 1] ++ Γ₁) ++ [DrugDose "Maria", Vial 0])
-                       [Vial 1] (Γ₁ ++ [DrugDose "Maria", Vial 0]) :=
-  .left (Split.idRight (Γ₁ ++ [DrugDose "Maria", Vial 0]))
+def dropVial1 : Split (([Vial 1] ++ Γ₀) ++ [DrugDose "Maria", DoseObligation "Maria", Vial 0])
+                       [Vial 1] (Γ₀ ++ [DrugDose "Maria", DoseObligation "Maria", Vial 0]) :=
+  .left (Split.idRight (Γ₀ ++ [DrugDose "Maria", DoseObligation "Maria", Vial 0]))
 
-def reorderMaria : Arrow ([DrugDose "Maria", Vial 0] ++ Γ₁)
-    ([Vial 0, DrugDose "Maria"] ++ Γ₁) :=
-  Arrow.par (Arrow.swap (Γ₁ := [DrugDose "Maria"]) (Γ₂ := [Vial 0])) (Arrow.id (Γ := Γ₁))
+def reorderMaria : Arrow ([DrugDose "Maria", DoseObligation "Maria", Vial 0] ++ Γ₀)
+    ([Vial 0, DrugDose "Maria", DoseObligation "Maria"] ++ Γ₀) :=
+  Arrow.par
+    (Arrow.swap (Γ₁ := [DrugDose "Maria", DoseObligation "Maria"]) (Γ₂ := [Vial 0]))
+    (Arrow.id (Γ := Γ₀))
 
-def supplyVisit2 : SheetDiagram clinicState Γ₁ clinicState
-    [[DrugDose "Maria"] ++ Γ₁] :=
+def supplyVisit2 : SheetDiagram clinicState Γ₀ clinicState
+    [[DrugDose "Maria", DoseObligation "Maria"] ++ Γ₀] :=
   .scope "supply-room" supplyRoomItems [Vial 1] [Vial 0] clinicState
     supplyRoomObligations PUnit.unit
     (.pipe drawDoseMaria
       (.pipe (.drop dropVial1)
-        (.pipe (Arrow.swap (Γ₁ := Γ₁) (Γ₂ := [DrugDose "Maria", Vial 0]))
+        (.pipe (Arrow.swap (Γ₁ := Γ₀) (Γ₂ := [DrugDose "Maria", DoseObligation "Maria", Vial 0]))
           (.arrow reorderMaria))))
 
--- ── Administer dose to Maria ─────────────────────────────────────────────────
+-- ── Administer dose to Maria + cap ─────────────────────────────────────────
 
-abbrev afterSupply2 : Ctx := [DrugDose "Maria"] ++ Γ₁
+abbrev afterSupply2 : Ctx := [DrugDose "Maria", DoseObligation "Maria"] ++ Γ₀
 
 def administerMaria : Arrow afterSupply2 (afterSupply2 ++ [AdminRecord "Maria"]) :=
   mkArrow "administerMaria" [DrugDose "Maria", Patient "Maria"] [AdminRecord "Maria"]
@@ -631,38 +695,50 @@ def administerMaria : Arrow afterSupply2 (afterSupply2 ++ [AdminRecord "Maria"])
       (.bind (Patient.mk "Maria") (by elem_tac) .nil))
 
 def dropUsedDoseMaria : Split (afterSupply2 ++ [AdminRecord "Maria"])
-                               [DrugDose "Maria"] Γ₂ :=
-  .left (Split.idRight Γ₂)
+                               [DrugDose "Maria"]
+                               ([DoseObligation "Maria"] ++ Γ₀ ++ [AdminRecord "Maria"]) :=
+  .left (Split.idRight ([DoseObligation "Maria"] ++ Γ₀ ++ [AdminRecord "Maria"]))
+
+/-- Split for cap: extract DoseObligation and AdminRecord, leaving Γ₀. -/
+def capSplitMaria : Split ([DoseObligation "Maria"] ++ Γ₀ ++ [AdminRecord "Maria"])
+                           [DoseObligation "Maria", AdminRecord "Maria"] Γ₀ :=
+  .left (.right (.right (.right (.right (.right (.left .nil))))))
+
+/-- Dose cycle for Maria: administer, drop used dose, cap obligation with record. -/
+def doseCycleMaria : SheetDiagram clinicState afterSupply2 clinicState [Γ₀] :=
+  .seq (.arrow (administerMaria ⟫ .drop dropUsedDoseMaria))
+    (.cap "dose-delivered-maria" (DoseObligation "Maria") (AdminRecord "Maria") capSplitMaria)
 
 -- ── Supply room visit 3: discard empty vial ─────────────────────────────────
--- Inner context: [Vial 0] ++ Γ₂.  Drop Vial 0, kept=[] (nothing reclaimed).
+-- Starts from Γ₀ (clean context after Maria's cap).
 
-def dropEmptyVial : Split ([Vial 0] ++ Γ₂) [Vial 0] Γ₂ :=
-  .left (Split.idRight Γ₂)
+def dropEmptyVial : Split ([Vial 0] ++ Γ₀) [Vial 0] Γ₀ :=
+  .left (Split.idRight Γ₀)
 
-def supplyVisit3 : SheetDiagram clinicState Γ₂ clinicState [Γ₂] :=
+def supplyVisit3 : SheetDiagram clinicState Γ₀ clinicState [Γ₀] :=
   .scope "supply-room" supplyRoomItems [Vial 0] ([] : Ctx) clinicState
     supplyRoomObligations PUnit.unit
     (.arrow (.drop dropEmptyVial))
 
 -- ── Full drug pipeline ──────────────────────────────────────────────────────
 
-/-- The complete two-patient drug administration pipeline:
-    1. Supply room visit 1: draw dose for Jose (Vial 2 → Vial 1)
-    2. Administer to Jose, drop used dose
-    3. Supply room visit 2: draw dose for Maria (Vial 1 → Vial 0)
-    4. Administer to Maria, drop used dose
-    5. Supply room visit 3: discard empty vial -/
-def drugPipeline : SheetDiagram clinicState Γ₀ clinicState [Γ₂] :=
+/-- The complete two-patient drug administration pipeline with fission pattern:
+    1. Supply room visit 1: draw dose for Jose (Vial 2 → Vial 1, produces DoseObligation)
+    2. Administer to Jose, drop used dose, cap obligation with AdminRecord → Γ₀
+    3. Supply room visit 2: draw dose for Maria (Vial 1 → Vial 0, produces DoseObligation)
+    4. Administer to Maria, drop used dose, cap obligation with AdminRecord → Γ₀
+    5. Supply room visit 3: discard empty vial → Γ₀
+    Cap cancels (AdminRecord, DoseObligation) pairs — pipeline returns to clean Γ₀. -/
+def drugPipeline : SheetDiagram clinicState Γ₀ clinicState [Γ₀] :=
   .seq supplyVisit1
-    (.seq (.arrow (administerJose ⟫ .drop dropUsedDoseJose))
+    (.seq doseCycleJose
       (.seq supplyVisit2
-        (.seq (.arrow (administerMaria ⟫ .drop dropUsedDoseMaria))
+        (.seq doseCycleMaria
           supplyVisit3)))
 
-/-- The full pipeline with trial + clinic scopes wrapping the drug pipeline. -/
-noncomputable def fullDrugPipeline : SheetDiagram initState drugCtx initState
-    [drugCtx ++ [AdminRecord "Jose", AdminRecord "Maria"]] :=
+/-- The full pipeline with trial + clinic scopes wrapping the drug pipeline.
+    Output is clean `drugCtx` — no AdminRecords accumulate (consumed by cap). -/
+noncomputable def fullDrugPipeline : SheetDiagram initState drugCtx initState [drugCtx] :=
   .scope "trial" trialItems trialExt trialExt initState
     trialObligations PUnit.unit
     (.scope "clinic" clinicItems clinicExt clinicExt (trialItems ++ initState)

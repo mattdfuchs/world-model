@@ -8,3 +8,6 @@ import WorldModel.KB.Arrow.Clinical
 import WorldModel.KB.Arrow.Erase
 import WorldModel.KB.Arrow.Resource
 import WorldModel.KB.Arrow.Obligation
+import WorldModel.KB.Arrow.Iterate
+import WorldModel.KB.Arrow.Dependency
+import WorldModel.KB.Arrow.Compile

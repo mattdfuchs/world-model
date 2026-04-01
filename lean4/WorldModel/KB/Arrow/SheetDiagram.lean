@@ -15,6 +15,8 @@
   - `scope`:  push new items onto the scope state, extend context by `ext`,
               reclaim `kept` at exit, and require proof obligations
   - `mutate`: change scope state without changing context
+  - `cup`:    create a conserved resource and its dual (ε → A ⊗ A*)
+  - `cap`:    cancel a resource/dual pair via Split (A ⊗ A* → ε)
 -/
 import WorldModel.KB.Arrow.Arrow
 import WorldModel.KB.Arrow.Selection
@@ -30,7 +32,12 @@ import WorldModel.KB.Arrow.Scope
     - `join`:   collapse two identical adjacent outcomes into one
     - `scope`:  push `newItems` onto scope stack, extend context by `ext`,
                 reclaim `kept` at exit; `ext ≠ kept` allows resource transformation
-    - `mutate`: change scope state, identity on context -/
+    - `mutate`: change scope state, identity on context
+    - `cup`:    create a complementary pair from nothing (ε → A ⊗ A*);
+                for `Dual` resources only; maps to (νk) in DLπ compilation
+    - `cap`:    find and remove a (resource, dual) pair via `Split`;
+                evidence is flexible (a need not match cup's type);
+                maps to communication/closure in DLπ compilation -/
 inductive SheetDiagram : ScopeState → Ctx → ScopeState → List Ctx → Type 1 where
   | arrow : Arrow Γ Δ → SheetDiagram st Γ st [Δ]
   | pipe  : Arrow Γ Δ → SheetDiagram st Δ st' Εs → SheetDiagram st Γ st' Εs
@@ -62,3 +69,10 @@ inductive SheetDiagram : ScopeState → Ctx → ScopeState → List Ctx → Type
            → SheetDiagram st_in Γ st_out Δs
 
   | mutate : (st' : ScopeState) → SheetDiagram st Γ st' [Γ]
+
+  | cup : (label : String) → (a : Type) → (a_star : Type)
+          → SheetDiagram st Γ st [a :: a_star :: Γ]
+
+  | cap : (label : String) → (a : Type) → (a_star : Type)
+          → Split Γ [a, a_star] Γ'
+          → SheetDiagram st Γ st [Γ']

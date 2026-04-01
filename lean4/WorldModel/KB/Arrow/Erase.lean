@@ -22,6 +22,8 @@ inductive Pipeline where
   | scope  : String → Pipeline → Pipeline
   | join   : Pipeline → Pipeline
   | halt   : Pipeline
+  | cup    : String → Pipeline
+  | cap    : String → Pipeline
   | noop   : Pipeline
   deriving Repr
 
@@ -44,6 +46,8 @@ def erase : SheetDiagram st Γ st' Δs → Pipeline
   | .halt                     => .halt
   | .scope label _ _ _ _ _ _ s  => .scope label (erase s)
   | .mutate _                 => .noop
+  | .cup label _ _            => .cup label
+  | .cap label _ _ _          => .cap label
 
 /-- The clinical pipeline with all proof content erased. -/
 def clinicalPipeline : Pipeline := erase JoseExample.scopedClinicalPipeline
@@ -59,6 +63,8 @@ partial def Pipeline.format (p : Pipeline) (indent : Nat) : String :=
   | .scope lbl b  => s!"{pad}scope {lbl}\n{b.format (indent + 1)}"
   | .join s       => s!"{pad}join\n{s.format (indent + 1)}"
   | .halt         => s!"{pad}halt"
+  | .cup label    => s!"{pad}cup {label}"
+  | .cap label    => s!"{pad}cap {label}"
   | .noop         => s!"{pad}noop"
 
 instance : ToString Pipeline where
