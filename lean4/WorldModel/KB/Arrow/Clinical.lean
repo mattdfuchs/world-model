@@ -56,6 +56,14 @@ inductive DrugDose : String → Type where
 inductive AdminRecord : String → Type where
   | mk : (patient : String) → AdminRecord patient
 
+/-- Record of adverse events collected during a visit. -/
+inductive AEReport : String → Type where
+  | mk : (patientName : String) → AEReport patientName
+
+/-- Survival status check result. -/
+inductive SurvivalStatus : String → Type where
+  | mk : (patientName : String) → SurvivalStatus patientName
+
 -- ── Dual types (co-endpoints for conserved resources) ──────────────────────
 
 /-- Proof of patient presence at a location. Dual of `Patient`. -/

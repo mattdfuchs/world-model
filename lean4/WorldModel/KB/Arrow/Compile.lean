@@ -6,7 +6,7 @@
     SoA (what happens) + KB facts (who, where, with what) → SheetDiagram (proof term)
 
   Three visit phases:
-    1. Screening (one-shot): consent + assessment with callConfirmed constraint
+    1. Screening (one-shot): consent + assessment with NQ branching (2 branch points)
     2. Drug administration (bounded × 3): `boundedIterate` with callConfirmed
     3. Weekly checkups (unbounded): `unboundedStep` with callConfirmed
 
@@ -120,9 +120,9 @@ abbrev visitState : ScopeState := visitItems ++ roomState
 -- Phase 1: Screening visit (one-shot)
 -- ══════════════════════════════════════════════════════════════════════════
 
-/-  Screening: consent → assessment (simplified happy path).
-    The visit scope requires callConfirmed evidence.
-    ext = [] (no extra resources), kept = [] (nothing persists). -/
+/-  Screening: branch (consent refusal) → consent → assessment → branch (NQ).
+    No visit-level callConfirmed scope — branching happens at room level.
+    Drug and checkup phases keep their own callConfirmed scopes. -/
 
 /-- Consent arrow: obtains informed consent. -/
 def screeningConsent : Arrow insideAllScopes (insideAllScopes ++ [ConsentGiven "Jose"]) :=
@@ -150,20 +150,25 @@ def dropScreeningResults :
   Split.append insideAllScopes [ConsentGiven "Jose", AssessmentResult "Jose"]
     |>.comm
 
-/-- Screening body: consent → assessment → drop results.
-    Runs inside the visit scope (state = visitState). -/
-def screeningBody : SheetDiagram visitState insideAllScopes visitState [insideAllScopes] :=
-  .pipe screeningConsent
-    (.pipe screeningAssessment
-      (.arrow (.drop dropScreeningResults)))
+-- ── Branching helpers (same pattern as Clinical.lean JoseExample) ────────────
 
-/-- Screening visit: scoped with callConfirmed constraint.
-    ext = [], kept = []: visit scope is transient — no resources persist. -/
-def screeningVisit : SheetDiagram roomState insideAllScopes roomState [insideAllScopes] :=
-  .scope "screening" visitItems ([] : Ctx) ([] : Ctx) roomState
-    visitObligations
-    call_confirmed_jose
-    screeningBody
+/-- Select the `insideAllScopes` prefix from any extended context `insideAllScopes ++ extra`.
+    All failure branches use this to drop produced items before disqualifying. -/
+def insideAllScopesSel {extra : Ctx}
+    : Selection (insideAllScopes ++ extra) insideAllScopes :=
+  Selection.prefix insideAllScopes extra
+
+/-- Shared disqualification arrow: produces NonQualifying from Patient. -/
+def nqArrow : Arrow insideAllScopes (insideAllScopes ++ [NonQualifying "Jose"]) :=
+  mkArrow "disqualify"
+    [Patient "Jose"]
+    [NonQualifying "Jose"]
+    (.bind (Patient.mk "Jose") (by elem_tac)
+      .nil)
+
+/-- Context after consent + assessment (branch point for post-assessment NQ check). -/
+abbrev afterAssessment : Ctx :=
+  (insideAllScopes ++ [ConsentGiven "Jose"]) ++ [AssessmentResult "Jose"]
 
 -- ══════════════════════════════════════════════════════════════════════════
 -- Phase 2: Drug administration (bounded × 3)
@@ -298,12 +303,22 @@ def checkupPhase : SheetDiagram roomState insideAllScopes roomState [insideAllSc
 -- Full compiled pipeline
 -- ══════════════════════════════════════════════════════════════════════════
 
-/-- The inner pipeline: screening → drug doses → weekly checkups.
-    All three phases compose over `insideAllScopes` via `seq`. -/
-def innerPipeline : SheetDiagram roomState insideAllScopes roomState [insideAllScopes] :=
-  .seq screeningVisit
-    (.seq drugPhase
-      checkupPhase)
+/-- The inner pipeline: screening with NQ branching → drug doses → weekly checkups.
+    Two branch points (consent refusal, post-assessment disqualification), one join.
+    On success, drug and checkup phases continue on the qualifying path. -/
+def innerPipeline : SheetDiagram roomState insideAllScopes roomState
+    [insideAllScopes ++ [NonQualifying "Jose"], insideAllScopes] :=
+  .join
+    (.branch (Split.idLeft insideAllScopes)
+      insideAllScopesSel (Selection.id insideAllScopes)
+      (.arrow nqArrow)
+      (.pipe screeningConsent
+        (.pipe screeningAssessment
+          (.branch (Split.idLeft afterAssessment)
+            insideAllScopesSel (Selection.id afterAssessment)
+            (.arrow nqArrow)
+            (.pipe (.drop dropScreeningResults)
+              (.seq drugPhase checkupPhase))))))
 
 /-- The complete JoseTrial pipeline with all scope nesting:
     trial scope (OurTrial, declares clinicianSpeaksPatient)
@@ -313,7 +328,8 @@ def innerPipeline : SheetDiagram roomState insideAllScopes roomState [insideAllS
 
     This is the Type 2 → Type 1 compilation result:
       SoA (joseTrialSoA) + KB facts → proof term (SheetDiagram). -/
-def joseTrialCompiled : SheetDiagram initState joseCtx initState [joseCtx] :=
+def joseTrialCompiled : SheetDiagram initState joseCtx initState
+    [joseCtx ++ [NonQualifying "Jose"], joseCtx] :=
   .scope "trial" trialItems trialExt trialExt initState
     trialObligations
     PUnit.unit

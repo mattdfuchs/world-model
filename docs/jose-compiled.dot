@@ -1,0 +1,167 @@
+digraph JoseTrialCompiled {
+  rankdir=TB;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=10];
+  edge [fontname="Helvetica", fontsize=8];
+  label="JoseTrial Compiled Pipeline (type-erased)";
+  labelloc=t;
+  fontsize=14;
+  compound=true;
+
+  // --- Patient entry ---
+  patient [label="Patient\n\"Jose\"", shape=house, style=filled, fillcolor="#DAE8FC"];
+
+  // === Trial scope ===
+  subgraph cluster_trial {
+    label="scope: trial (OurTrial)";
+    style=rounded;
+    color="#8E44AD";
+    fontcolor="#8E44AD";
+    bgcolor="#F5EEF8";
+
+    // === Clinic scope ===
+    subgraph cluster_clinic {
+      label="scope: clinic (ValClinic, Allen)\nobligations: ClinicCityEvidence, SharedLangEvidence,\nassigned, trialApproves";
+      style=rounded;
+      color="#2980B9";
+      fontcolor="#2980B9";
+      bgcolor="#EBF5FB";
+
+      // === Room scope ===
+      subgraph cluster_room {
+        label="scope: room (Room3, ExamBed, BPMonitor, VO2Equipment)\nobligations: examBedQual, bpMonitorQual, vo2Qual";
+        style=rounded;
+        color="#16A085";
+        fontcolor="#16A085";
+        bgcolor="#E8F8F5";
+
+        // ── Phase 1: Screening with NQ branching ──
+        branch1 [label="branch", shape=diamond, style=filled, fillcolor="#F8D7DA", width=0.8, height=0.5];
+        nq1 [label="disqualify\n(consent refused)", shape=box, style="filled,rounded", fillcolor="#F5B7B1"];
+        s_consent [label="consent", shape=box, style="filled,rounded", fillcolor="#D5E8D4"];
+        s_assessment [label="assessment", shape=box, style="filled,rounded", fillcolor="#D5E8D4"];
+
+        branch2 [label="branch", shape=diamond, style=filled, fillcolor="#F8D7DA", width=0.8, height=0.5];
+        nq2 [label="disqualify\n(post-assessment)", shape=box, style="filled,rounded", fillcolor="#F5B7B1"];
+
+        join1 [label="join", shape=invtriangle, style=filled, fillcolor="#FADBD8", width=0.6, height=0.4];
+
+        // ── Phase 2: Drug doses x3 ──
+        subgraph cluster_drug1 {
+          label="scope: drug-dose (1/3)";
+          style=rounded;
+          color="#E67E22";
+          fontcolor="#E67E22";
+          bgcolor="#FDF2E9";
+
+          subgraph cluster_dose1 {
+            label="scope: dose-visit\nconstraint: callConfirmed";
+            style=rounded;
+            color="#D35400";
+            fontcolor="#D35400";
+
+            d1_call [label="CallConfirmed", shape=note, style=filled, fillcolor="#FFFFCC", fontsize=9];
+            d1_admin [label="drugAdmin", shape=box, style="filled,rounded", fillcolor="#FFF2CC"];
+          }
+        }
+
+        subgraph cluster_drug2 {
+          label="scope: drug-dose (2/3)";
+          style=rounded;
+          color="#E67E22";
+          fontcolor="#E67E22";
+          bgcolor="#FDF2E9";
+
+          subgraph cluster_dose2 {
+            label="scope: dose-visit\nconstraint: callConfirmed";
+            style=rounded;
+            color="#D35400";
+            fontcolor="#D35400";
+
+            d2_call [label="CallConfirmed", shape=note, style=filled, fillcolor="#FFFFCC", fontsize=9];
+            d2_admin [label="drugAdmin", shape=box, style="filled,rounded", fillcolor="#FFF2CC"];
+          }
+        }
+
+        subgraph cluster_drug3 {
+          label="scope: drug-dose (3/3)";
+          style=rounded;
+          color="#E67E22";
+          fontcolor="#E67E22";
+          bgcolor="#FDF2E9";
+
+          subgraph cluster_dose3 {
+            label="scope: dose-visit\nconstraint: callConfirmed";
+            style=rounded;
+            color="#D35400";
+            fontcolor="#D35400";
+
+            d3_call [label="CallConfirmed", shape=note, style=filled, fillcolor="#FFFFCC", fontsize=9];
+            d3_admin [label="drugAdmin", shape=box, style="filled,rounded", fillcolor="#FFF2CC"];
+          }
+        }
+
+        // ── Phase 3: Weekly checkups (unbounded) ──
+        subgraph cluster_checkup {
+          label="scope: weekly-checkup (unbounded)";
+          style=rounded;
+          color="#27AE60";
+          fontcolor="#27AE60";
+          bgcolor="#EAFAF1";
+
+          subgraph cluster_checkup_visit {
+            label="scope: checkup-visit\nconstraint: callConfirmed";
+            style=rounded;
+            color="#1E8449";
+            fontcolor="#1E8449";
+
+            c_call [label="CallConfirmed", shape=note, style=filled, fillcolor="#FFFFCC", fontsize=9];
+            c_checkup [label="checkup", shape=box, style="filled,rounded", fillcolor="#D5E8D4"];
+          }
+
+          unbounded_label [label="... repeats ...", shape=plaintext, fontcolor="#888888", fontsize=9];
+        }
+      }
+    }
+  }
+
+  // --- Outputs ---
+  nq_out [label="NonQualifying\n\"Jose\"", shape=octagon, style=filled, fillcolor="#F5B7B1"];
+  output [label="Patient\n\"Jose\"", shape=invhouse, style=filled, fillcolor="#DAE8FC"];
+
+  // --- Flow edges ---
+  patient -> branch1;
+
+  // Branch 1: consent refusal
+  branch1 -> nq1 [label="refuse", fontcolor="#C0392B"];
+  branch1 -> s_consent [label="ok", fontcolor="#27AE60"];
+
+  // Consent → assessment → branch 2
+  s_consent -> s_assessment;
+  s_assessment -> branch2;
+
+  // Branch 2: post-assessment disqualification
+  branch2 -> nq2 [label="NQ", fontcolor="#C0392B"];
+  branch2 -> d1_call [lhead=cluster_drug1, label="qualify", fontcolor="#27AE60"];
+
+  d1_call -> d1_admin;
+  d1_admin -> d2_call [lhead=cluster_drug2, label="seq", fontcolor="#666666"];
+
+  d2_call -> d2_admin;
+  d2_admin -> d3_call [lhead=cluster_drug3, label="seq", fontcolor="#666666"];
+
+  d3_call -> d3_admin;
+  d3_admin -> c_call [lhead=cluster_checkup, label="seq", fontcolor="#666666"];
+
+  // checkup internal
+  c_call -> c_checkup;
+  c_checkup -> unbounded_label;
+
+  // NQ paths → join → NQ output
+  nq1 -> join1;
+  nq2 -> join1;
+  join1 -> nq_out [style=dashed, color="#C0392B"];
+
+  // Success output
+  unbounded_label -> output [ltail=cluster_checkup, style=dashed];
+}

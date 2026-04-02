@@ -66,6 +66,8 @@ instance : Consumed (AssessmentResult name) where
 instance : Consumed (Vial n) where
 instance : Consumed (DrugDose name) where
 instance : Consumed (AdminRecord name) where
+instance : Consumed (AEReport name) where
+instance : Consumed (SurvivalStatus name) where
 instance : Consumed (DoseObligation name) where
 
 -- Consent / disqualification

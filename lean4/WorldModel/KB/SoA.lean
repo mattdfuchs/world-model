@@ -13,6 +13,7 @@
     - Activity nodes (procedures): category
     - Edges: performs (visit→activity), follows (visit→visit), requires (activity→activity)
 -/
+import WorldModel.KB.Neo4j
 
 -- ── Study phases ──────────────────────────────────────────────────────────
 
@@ -225,12 +226,153 @@ structure VisitSlot where
   deriving Repr
 
 /-- Extract a linearized visit plan from a SoA.
-    Orders interactions by nominal day (topological sort via timing).
-    Each slot carries its activities. -/
+    Uses topological sort via `follows` edges, falling back to declaration order
+    for nodes not connected by follows edges.  Each slot carries its activities. -/
 def SoA.visitPlan (soa : SoA) : List VisitSlot :=
-  let sorted := soa.interactions.mergeSort
-    (fun a b => a.timing.nominalDay < b.timing.nominalDay)
-  sorted.map fun node =>
+  -- Build follows adjacency: src → dst
+  let followPairs := soa.edges.filterMap fun
+    | .follows s d _ => some (s, d)
+    | _ => none
+  -- Compute topological depth: 0 for sources, +1 for each predecessor
+  let rec depth (id : String) (fuel : Nat) : Nat :=
+    match fuel with
+    | 0 => 0
+    | fuel + 1 =>
+      let preds := followPairs.filterMap fun (s, d) =>
+        if d == id then some s else none
+      match preds with
+      | [] => 0
+      | _ => 1 + preds.foldl (fun acc p => max acc (depth p fuel)) 0
+  let indexed := soa.interactions.mapIdx fun i n => (i, n)
+  let sorted := indexed.mergeSort
+    (fun (i, a) (j, b) =>
+      let da := depth a.id followPairs.length
+      let db := depth b.id followPairs.length
+      da < db || (da == db && i < j))
+  sorted.map fun (_, node) =>
     { interaction := node, activities := soa.activitiesAt node.id }
+
+-- ── Neo4j Cypher serialization ──────────────────────────────────────────
+
+/-- Show a StudyPhase as a string. -/
+def StudyPhase.toString : StudyPhase → String
+  | .screening  => "screening"
+  | .baseline   => "baseline"
+  | .treatment  => "treatment"
+  | .followUp   => "follow-up"
+  | .completion => "completion"
+
+instance : ToString StudyPhase := ⟨StudyPhase.toString⟩
+
+/-- Show a TerminationCondition as a string. -/
+def TerminationCondition.toString : TerminationCondition → String
+  | .endOfStudy   => "endOfStudy"
+  | .progression  => "progression"
+  | .withdrawal   => "withdrawal"
+  | .death        => "death"
+  | .fixed n      => s!"fixed:{n}"
+
+instance : ToString TerminationCondition := ⟨TerminationCondition.toString⟩
+
+/-- Describe an interaction's iteration pattern as a short string. -/
+def InteractionNode.iterationDesc (node : InteractionNode) : String :=
+  match node.repeating with
+  | none => "one-shot"
+  | some (.every _ (.fixed n)) => s!"bounded × {n}"
+  | some (.every _ tc) => s!"unbounded until {tc}"
+  | some (.cycles days) => s!"cycles ({days}d)"
+
+/-- Show a CellValue as a string. -/
+def CellValue.toString : CellValue → String
+  | .required       => "required"
+  | .optional       => "optional"
+  | .conditional n  => s!"conditional: {n}"
+  | .quantity a     => s!"quantity: {a}"
+  | .continuous     => "continuous"
+  | .frequency d    => s!"frequency: {d}"
+
+instance : ToString CellValue := ⟨CellValue.toString⟩
+
+/-- Match an Interaction node by its `id` field. -/
+private def matchInteraction (id : String) : String :=
+  s!"(a:Interaction \{id: \"{id}\"})"
+
+/-- Generate Cypher MERGE statements for an entire SoA graph.
+    Creates: SoA node, Interaction nodes, HAS_INTERACTION edges,
+    Activity MERGE (idempotent with catalog), PERFORMS edges,
+    FOLLOWS edges, REQUIRES_ACTIVITY edges.
+    Note: Interaction nodes use `id` as match key (not `name`). -/
+def SoA.toCypher (soa : SoA) : List String :=
+  -- SoA node
+  let soaNode := (Neo4jRepr.node "SoA" [("name", soa.name)]).toCypher
+  -- Interaction nodes
+  let interactionNodes := soa.interactions.map fun n =>
+    (Neo4jRepr.node "Interaction"
+      [("id", n.id), ("name", n.name), ("phase", toString n.phase),
+       ("iteration", n.iterationDesc)]).toCypher
+  -- HAS_INTERACTION edges (use id for matching)
+  let hasInteraction := soa.interactions.map fun n =>
+    s!"MATCH (a:SoA \{name: \"{soa.name}\"})\nMATCH (b:Interaction \{id: \"{n.id}\"})\nMERGE (a)-[:HAS_INTERACTION]->(b)"
+  -- Activity MERGEs (idempotent — Activity nodes may already exist from catalog)
+  let activityMerges := soa.activities.map fun a =>
+    (Neo4jRepr.node "Activity" [("name", a.id)]).toCypher
+  -- HAS_ACTIVITY edges
+  let hasActivity := soa.activities.map fun a =>
+    (Neo4jRepr.edge "HAS_ACTIVITY" "SoA" soa.name "Activity" a.id).toCypher
+  -- Edge-based statements
+  let edgeStmts := soa.edges.flatMap fun
+    | .performs iid aid val =>
+      [s!"MATCH {matchInteraction iid}\nMATCH (b:Activity \{name: \"{aid}\"})\nMERGE (a)-[:PERFORMS \{value: \"{val}\"}]->(b)"]
+    | .follows s d _ =>
+      [s!"MATCH {matchInteraction s}\nMATCH (b:Interaction \{id: \"{d}\"})\nMERGE (a)-[:FOLLOWS]->(b)"]
+    | .requires act pre =>
+      [(Neo4jRepr.edge "REQUIRES_ACTIVITY" "Activity" act "Activity" pre).toCypher]
+  [soaNode] ++ interactionNodes ++ hasInteraction
+    ++ activityMerges ++ hasActivity ++ edgeStmts
+
+-- ── Text serialization for Designer prompt ──────────────────────────────
+
+/-- Render a SoA as readable text for the Designer agent prompt.
+    Omits timing details — only shows ordering and iteration patterns. -/
+def SoA.toDesignerText (soa : SoA) : String :=
+  let visitPlan := soa.visitPlan
+  -- Header
+  let header := s!"=== Schedule of Activities: {soa.name} ===\n"
+  -- Visits section
+  let visits := visitPlan.map fun slot =>
+    let n := slot.interaction
+    let actList := slot.activities.map fun (a, cv) =>
+      s!"{a.id} [{cv}]"
+    let actStr := ", ".intercalate actList
+    s!"  {n.id} \"{n.name}\" ({n.phase}, {n.iterationDesc})\n    activities: {actStr}"
+  let visitsSection := "VISITS:\n" ++ "\n\n".intercalate visits ++ "\n"
+  -- Ordering section: chain follows edges into a path
+  let followPairs := soa.edges.filterMap fun
+    | .follows s d _ => some (s, d)
+    | _ => none
+  -- Find sources (nodes that appear as src but not as dst)
+  let dsts := followPairs.map (·.2)
+  let sources := followPairs.filterMap fun (s, _) =>
+    if dsts.contains s then none else some s
+  -- Build chain from each source
+  let rec buildChain (current : String) (pairs : List (String × String))
+      (fuel : Nat) : List String :=
+    match fuel with
+    | 0 => [current]
+    | fuel + 1 =>
+      match pairs.find? (·.1 == current) with
+      | some (_, next) => current :: buildChain next pairs fuel
+      | none => [current]
+  let chain := match sources.head? with
+    | some start => buildChain start followPairs followPairs.length
+    | none => followPairs.map (·.1) -- fallback
+  let orderingSection := "ORDERING:\n  " ++ " → ".intercalate chain ++ "\n"
+  -- Activity dependencies section
+  let depEdges := soa.edges.filterMap fun
+    | .requires act pre => some s!"  {act} requires {pre}"
+    | _ => none
+  let depSection := if depEdges.isEmpty then ""
+    else "ACTIVITY DEPENDENCIES:\n" ++ "\n".intercalate depEdges ++ "\n"
+  header ++ "\n" ++ visitsSection ++ "\n" ++ orderingSection ++ "\n" ++ depSection
 
 -- Worked examples: see lean4/test/SoA/ (JoseTrial.lean, TJ301.lean, Osimertinib.lean)

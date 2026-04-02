@@ -1,0 +1,78 @@
+digraph JoseTrialSoA {
+  rankdir=TB;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11];
+  edge [fontname="Helvetica", fontsize=9];
+  label="Schedule of Activities: OurTrial (SoA)";
+  labelloc=t;
+  fontsize=14;
+
+  // --- Interaction nodes (visits) ---
+  subgraph cluster_screening {
+    label="Screening Visit\n(one-shot)";
+    style=rounded;
+    color="#4A90D9";
+    fontcolor="#4A90D9";
+    bgcolor="#EEF4FC";
+
+    screening [label="screening", shape=box, style=filled, fillcolor="#4A90D9", fontcolor=white];
+  }
+
+  subgraph cluster_drug {
+    label="Drug Administration\n(bounded × 3)";
+    style=rounded;
+    color="#E67E22";
+    fontcolor="#E67E22";
+    bgcolor="#FDF2E9";
+
+    drugDose [label="drugDose", shape=box, style=filled, fillcolor="#E67E22", fontcolor=white];
+  }
+
+  subgraph cluster_checkup {
+    label="Weekly Checkup\n(unbounded until death)";
+    style=rounded;
+    color="#27AE60";
+    fontcolor="#27AE60";
+    bgcolor="#EAFAF1";
+
+    weeklyCheckup [label="weeklyCheckup", shape=box, style=filled, fillcolor="#27AE60", fontcolor=white];
+  }
+
+  // --- Activity nodes ---
+  consent       [label="consent\n(initiation)",   shape=ellipse, style=filled, fillcolor="#D5E8D4"];
+  physicalExam  [label="physicalExam\n(clinical)", shape=ellipse, style=filled, fillcolor="#D5E8D4"];
+  vitalSigns    [label="vitalSigns\n(clinical)",   shape=ellipse, style=filled, fillcolor="#D5E8D4"];
+  assessment    [label="assessment\n(clinical)",   shape=ellipse, style=filled, fillcolor="#D5E8D4"];
+  drugAdmin     [label="drugAdmin\n(intervention)", shape=ellipse, style=filled, fillcolor="#FFF2CC"];
+  aeCollection  [label="aeCollection\n(safety)",    shape=ellipse, style=filled, fillcolor="#F8CECC"];
+  survivalCheck [label="survivalCheck\n(safety)",   shape=ellipse, style=filled, fillcolor="#F8CECC"];
+  disqualify    [label="disqualify\n(initiation)",  shape=ellipse, style=filled, fillcolor="#E1D5E7"];
+
+  // --- FOLLOWS edges (visit ordering) ---
+  screening -> drugDose [label="follows", style=bold, color="#333333", penwidth=2];
+  drugDose -> weeklyCheckup [label="follows", style=bold, color="#333333", penwidth=2];
+
+  // --- PERFORMS edges (visit → activity) ---
+  // screening
+  screening -> consent       [label="required",    color="#4A90D9", style=dashed];
+  screening -> physicalExam  [label="required",    color="#4A90D9", style=dashed];
+  screening -> vitalSigns    [label="required",    color="#4A90D9", style=dashed];
+  screening -> assessment    [label="required",    color="#4A90D9", style=dashed];
+  screening -> disqualify    [label="conditional", color="#4A90D9", style=dotted];
+
+  // drugDose
+  drugDose -> drugAdmin     [label="required", color="#E67E22", style=dashed];
+  drugDose -> vitalSigns    [label="required", color="#E67E22", style=dashed];
+  drugDose -> aeCollection  [label="required", color="#E67E22", style=dashed];
+
+  // weeklyCheckup
+  weeklyCheckup -> vitalSigns    [label="required", color="#27AE60", style=dashed];
+  weeklyCheckup -> assessment    [label="required", color="#27AE60", style=dashed];
+  weeklyCheckup -> aeCollection  [label="required", color="#27AE60", style=dashed];
+  weeklyCheckup -> survivalCheck [label="required", color="#27AE60", style=dashed];
+
+  // --- REQUIRES edges (activity dependencies) ---
+  physicalExam -> consent    [label="requires", color="#C0392B", style=bold, arrowhead=vee];
+  drugAdmin -> consent       [label="requires", color="#C0392B", style=bold, arrowhead=vee];
+  assessment -> physicalExam [label="requires", color="#C0392B", style=bold, arrowhead=vee];
+}

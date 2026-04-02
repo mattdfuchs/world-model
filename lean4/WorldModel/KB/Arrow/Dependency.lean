@@ -101,8 +101,7 @@ def joseTrialDeps : DependencyManifest :=
           { scopeLabel := "room"
             kbFacts := ["allen_holds_exambed", "allen_holds_bpmonitor", "allen_holds_vo2equip"]
             children := [
-              { scopeLabel := "screening", kbFacts := ["call_confirmed_jose"], children := [] }
-            , { scopeLabel := "drug-dose", kbFacts := ["call_confirmed_jose"], children := [] }
+              { scopeLabel := "drug-dose", kbFacts := ["call_confirmed_jose"], children := [] }
             , { scopeLabel := "weekly-checkup", kbFacts := ["call_confirmed_jose"], children := [] }
             ] }
         ] }

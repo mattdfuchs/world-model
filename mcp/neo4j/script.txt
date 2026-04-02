@@ -154,6 +154,7 @@ MERGE (n:Constraint {name: "sharedLanguage", english: "Clinician and patient mus
 MERGE (n:Constraint {name: "examBedQualification", english: "Operator must hold ExamBed certification", leanType: "ExamBedQual"});
 MERGE (n:Constraint {name: "bpMonitorQualification", english: "Operator must hold BP monitor certification", leanType: "BPMonitorQual"});
 MERGE (n:Constraint {name: "vo2Qualification", english: "Operator must hold VO2 equipment certification", leanType: "VO2EquipmentQual"});
+MERGE (n:Constraint {name: "callConfirmed", english: "Patient must be called to confirm attendance before each visit", leanType: "CallConfirmed"});
 MERGE (n:Equipment);
 MERGE (n:Qualification);
 MERGE (n:Measurement);
@@ -164,6 +165,10 @@ MERGE (n:VO2Max);
 MERGE (n:ProductsOutput);
 MERGE (n:AssessmentResult);
 MERGE (n:NonQualifying);
+MERGE (n:AdminRecord);
+MERGE (n:AEReport);
+MERGE (n:SurvivalStatus);
+MERGE (n:CallConfirmed);
 MERGE (n:ActionSpec {name: "consent", description: "Obtains informed consent from the patient"});
 MERGE (n:ActionSpec {name: "heartMeasurement", description: "Measures the patient's heart rate using an exam bed"});
 MERGE (n:ActionSpec {name: "bpMeasurement", description: "Measures the patient's blood pressure using a BP monitor"});
@@ -171,6 +176,18 @@ MERGE (n:ActionSpec {name: "vo2Measurement", description: "Measures the patient'
 MERGE (n:ActionSpec {name: "products", description: "Aggregates all measurement results into a single output"});
 MERGE (n:ActionSpec {name: "assessment", description: "Evaluates aggregated results to determine if patient qualifies"});
 MERGE (n:ActionSpec {name: "disqualify", description: "Records patient disqualification with a reason"});
+MERGE (n:ActionSpec {name: "drugAdmin", description: "Administers study drug to patient"});
+MERGE (n:ActionSpec {name: "aeCollection", description: "Collects adverse event reports from patient"});
+MERGE (n:ActionSpec {name: "survivalCheck", description: "Checks patient survival status"});
+MERGE (n:ActionSpec {name: "confirmationCall", description: "Phone call to confirm patient attendance before visit"});
+MERGE (n:Activity {name: "consent", displayName: "Informed consent", category: "initiation"});
+MERGE (n:Activity {name: "physicalExam", displayName: "Physical examination", category: "clinical"});
+MERGE (n:Activity {name: "vitalSigns", displayName: "Vital signs", category: "clinical"});
+MERGE (n:Activity {name: "assessment", displayName: "Clinical assessment", category: "clinical"});
+MERGE (n:Activity {name: "drugAdmin", displayName: "Drug administration", category: "intervention"});
+MERGE (n:Activity {name: "aeCollection", displayName: "Adverse events", category: "safety"});
+MERGE (n:Activity {name: "survivalCheck", displayName: "Survival status", category: "safety"});
+MERGE (n:Activity {name: "disqualify", displayName: "Disqualification", category: "initiation"});
 MATCH (a:ClinicalTrial {name: "OurTrial"})
 MATCH (b:Constraint {name: "sharedLanguage"})
 MERGE (a)-[:imposesConstraint]->(b);
@@ -279,6 +296,27 @@ MERGE (a)-[:REQUIRES {role: "prerequisite"}]->(b);
 MATCH (a:ActionSpec {name: "disqualify"})
 MATCH (b:Role {name: "Patient"})
 MERGE (a)-[:REQUIRES {role: "subject"}]->(b);
+MATCH (a:ActionSpec {name: "drugAdmin"})
+MATCH (b:Role {name: "Patient"})
+MERGE (a)-[:REQUIRES {role: "subject"}]->(b);
+MATCH (a:ActionSpec {name: "drugAdmin"})
+MATCH (b:Role {name: "Clinician"})
+MERGE (a)-[:REQUIRES {role: "operator"}]->(b);
+MATCH (a:ActionSpec {name: "aeCollection"})
+MATCH (b:Role {name: "Patient"})
+MERGE (a)-[:REQUIRES {role: "subject"}]->(b);
+MATCH (a:ActionSpec {name: "aeCollection"})
+MATCH (b:Role {name: "Clinician"})
+MERGE (a)-[:REQUIRES {role: "operator"}]->(b);
+MATCH (a:ActionSpec {name: "survivalCheck"})
+MATCH (b:Role {name: "Patient"})
+MERGE (a)-[:REQUIRES {role: "subject"}]->(b);
+MATCH (a:ActionSpec {name: "survivalCheck"})
+MATCH (b:Role {name: "Clinician"})
+MERGE (a)-[:REQUIRES {role: "operator"}]->(b);
+MATCH (a:ActionSpec {name: "confirmationCall"})
+MATCH (b:Role {name: "Patient"})
+MERGE (a)-[:REQUIRES {role: "subject"}]->(b);
 MATCH (a:ActionSpec {name: "consent"})
 MATCH (b:ConsentGiven)
 MERGE (a)-[:PRODUCES]->(b);
@@ -300,3 +338,147 @@ MERGE (a)-[:PRODUCES]->(b);
 MATCH (a:ActionSpec {name: "disqualify"})
 MATCH (b:NonQualifying)
 MERGE (a)-[:PRODUCES]->(b);
+MATCH (a:ActionSpec {name: "drugAdmin"})
+MATCH (b:AdminRecord)
+MERGE (a)-[:PRODUCES]->(b);
+MATCH (a:ActionSpec {name: "aeCollection"})
+MATCH (b:AEReport)
+MERGE (a)-[:PRODUCES]->(b);
+MATCH (a:ActionSpec {name: "survivalCheck"})
+MATCH (b:SurvivalStatus)
+MERGE (a)-[:PRODUCES]->(b);
+MATCH (a:ActionSpec {name: "confirmationCall"})
+MATCH (b:CallConfirmed)
+MERGE (a)-[:PRODUCES]->(b);
+MATCH (a:Constraint {name: "callConfirmed"})
+MATCH (b:CallConfirmed)
+MERGE (a)-[:REQUIRES_EVIDENCE]->(b);
+MATCH (a:Activity {name: "consent"})
+MATCH (b:ActionSpec {name: "consent"})
+MERGE (a)-[:IMPLEMENTED_BY]->(b);
+MATCH (a:Activity {name: "assessment"})
+MATCH (b:ActionSpec {name: "assessment"})
+MERGE (a)-[:IMPLEMENTED_BY]->(b);
+MATCH (a:Activity {name: "drugAdmin"})
+MATCH (b:ActionSpec {name: "drugAdmin"})
+MERGE (a)-[:IMPLEMENTED_BY]->(b);
+MATCH (a:Activity {name: "aeCollection"})
+MATCH (b:ActionSpec {name: "aeCollection"})
+MERGE (a)-[:IMPLEMENTED_BY]->(b);
+MATCH (a:Activity {name: "survivalCheck"})
+MATCH (b:ActionSpec {name: "survivalCheck"})
+MERGE (a)-[:IMPLEMENTED_BY]->(b);
+MATCH (a:Activity {name: "disqualify"})
+MATCH (b:ActionSpec {name: "disqualify"})
+MERGE (a)-[:IMPLEMENTED_BY]->(b);
+MATCH (a:Activity {name: "physicalExam"})
+MATCH (b:ActionSpec {name: "heartMeasurement"})
+MERGE (a)-[:IMPLEMENTED_BY]->(b);
+MATCH (a:Activity {name: "physicalExam"})
+MATCH (b:ActionSpec {name: "bpMeasurement"})
+MERGE (a)-[:IMPLEMENTED_BY]->(b);
+MATCH (a:Activity {name: "physicalExam"})
+MATCH (b:ActionSpec {name: "vo2Measurement"})
+MERGE (a)-[:IMPLEMENTED_BY]->(b);
+MATCH (a:Activity {name: "vitalSigns"})
+MATCH (b:ActionSpec {name: "heartMeasurement"})
+MERGE (a)-[:IMPLEMENTED_BY]->(b);
+MATCH (a:Activity {name: "vitalSigns"})
+MATCH (b:ActionSpec {name: "bpMeasurement"})
+MERGE (a)-[:IMPLEMENTED_BY]->(b);
+MERGE (n:SoA {name: "OurTrial"});
+MERGE (n:Interaction {id: "screening", name: "Screening Visit", phase: "screening", iteration: "one-shot"});
+MERGE (n:Interaction {id: "drugDose", name: "Drug Administration", phase: "treatment", iteration: "bounded × 3"});
+MERGE (n:Interaction {id: "weeklyCheckup", name: "Weekly Checkup", phase: "follow-up", iteration: "unbounded until death"});
+MATCH (a:SoA {name: "OurTrial"})
+MATCH (b:Interaction {id: "screening"})
+MERGE (a)-[:HAS_INTERACTION]->(b);
+MATCH (a:SoA {name: "OurTrial"})
+MATCH (b:Interaction {id: "drugDose"})
+MERGE (a)-[:HAS_INTERACTION]->(b);
+MATCH (a:SoA {name: "OurTrial"})
+MATCH (b:Interaction {id: "weeklyCheckup"})
+MERGE (a)-[:HAS_INTERACTION]->(b);
+MERGE (n:Activity {name: "consent"});
+MERGE (n:Activity {name: "physicalExam"});
+MERGE (n:Activity {name: "vitalSigns"});
+MERGE (n:Activity {name: "assessment"});
+MERGE (n:Activity {name: "drugAdmin"});
+MERGE (n:Activity {name: "aeCollection"});
+MERGE (n:Activity {name: "survivalCheck"});
+MERGE (n:Activity {name: "disqualify"});
+MATCH (a:SoA {name: "OurTrial"})
+MATCH (b:Activity {name: "consent"})
+MERGE (a)-[:HAS_ACTIVITY]->(b);
+MATCH (a:SoA {name: "OurTrial"})
+MATCH (b:Activity {name: "physicalExam"})
+MERGE (a)-[:HAS_ACTIVITY]->(b);
+MATCH (a:SoA {name: "OurTrial"})
+MATCH (b:Activity {name: "vitalSigns"})
+MERGE (a)-[:HAS_ACTIVITY]->(b);
+MATCH (a:SoA {name: "OurTrial"})
+MATCH (b:Activity {name: "assessment"})
+MERGE (a)-[:HAS_ACTIVITY]->(b);
+MATCH (a:SoA {name: "OurTrial"})
+MATCH (b:Activity {name: "drugAdmin"})
+MERGE (a)-[:HAS_ACTIVITY]->(b);
+MATCH (a:SoA {name: "OurTrial"})
+MATCH (b:Activity {name: "aeCollection"})
+MERGE (a)-[:HAS_ACTIVITY]->(b);
+MATCH (a:SoA {name: "OurTrial"})
+MATCH (b:Activity {name: "survivalCheck"})
+MERGE (a)-[:HAS_ACTIVITY]->(b);
+MATCH (a:SoA {name: "OurTrial"})
+MATCH (b:Activity {name: "disqualify"})
+MERGE (a)-[:HAS_ACTIVITY]->(b);
+MATCH (a:Interaction {id: "screening"})
+MATCH (b:Interaction {id: "drugDose"})
+MERGE (a)-[:FOLLOWS]->(b);
+MATCH (a:Interaction {id: "drugDose"})
+MATCH (b:Interaction {id: "weeklyCheckup"})
+MERGE (a)-[:FOLLOWS]->(b);
+MATCH (a:Interaction {id: "screening"})
+MATCH (b:Activity {name: "consent"})
+MERGE (a)-[:PERFORMS {value: "required"}]->(b);
+MATCH (a:Interaction {id: "screening"})
+MATCH (b:Activity {name: "physicalExam"})
+MERGE (a)-[:PERFORMS {value: "required"}]->(b);
+MATCH (a:Interaction {id: "screening"})
+MATCH (b:Activity {name: "vitalSigns"})
+MERGE (a)-[:PERFORMS {value: "required"}]->(b);
+MATCH (a:Interaction {id: "screening"})
+MATCH (b:Activity {name: "assessment"})
+MERGE (a)-[:PERFORMS {value: "required"}]->(b);
+MATCH (a:Interaction {id: "screening"})
+MATCH (b:Activity {name: "disqualify"})
+MERGE (a)-[:PERFORMS {value: "conditional: if exclusion criteria met"}]->(b);
+MATCH (a:Interaction {id: "drugDose"})
+MATCH (b:Activity {name: "drugAdmin"})
+MERGE (a)-[:PERFORMS {value: "required"}]->(b);
+MATCH (a:Interaction {id: "drugDose"})
+MATCH (b:Activity {name: "vitalSigns"})
+MERGE (a)-[:PERFORMS {value: "required"}]->(b);
+MATCH (a:Interaction {id: "drugDose"})
+MATCH (b:Activity {name: "aeCollection"})
+MERGE (a)-[:PERFORMS {value: "required"}]->(b);
+MATCH (a:Interaction {id: "weeklyCheckup"})
+MATCH (b:Activity {name: "vitalSigns"})
+MERGE (a)-[:PERFORMS {value: "required"}]->(b);
+MATCH (a:Interaction {id: "weeklyCheckup"})
+MATCH (b:Activity {name: "assessment"})
+MERGE (a)-[:PERFORMS {value: "required"}]->(b);
+MATCH (a:Interaction {id: "weeklyCheckup"})
+MATCH (b:Activity {name: "aeCollection"})
+MERGE (a)-[:PERFORMS {value: "required"}]->(b);
+MATCH (a:Interaction {id: "weeklyCheckup"})
+MATCH (b:Activity {name: "survivalCheck"})
+MERGE (a)-[:PERFORMS {value: "required"}]->(b);
+MATCH (a:Activity {name: "physicalExam"})
+MATCH (b:Activity {name: "consent"})
+MERGE (a)-[:REQUIRES_ACTIVITY]->(b);
+MATCH (a:Activity {name: "drugAdmin"})
+MATCH (b:Activity {name: "consent"})
+MERGE (a)-[:REQUIRES_ACTIVITY]->(b);
+MATCH (a:Activity {name: "assessment"})
+MATCH (b:Activity {name: "physicalExam"})
+MERGE (a)-[:REQUIRES_ACTIVITY]->(b);

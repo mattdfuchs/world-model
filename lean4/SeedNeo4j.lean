@@ -5,6 +5,7 @@
 -/
 import WorldModel.KB.Neo4j
 import WorldModel.KB.ActionCatalog
+import WorldModel.KB.SoA
 
 open Neo4jRepr
 open KB.Facts
@@ -103,8 +104,53 @@ def allCypher : List String :=
   , (ToNeo4j.toRepr matthew_holds_vo2equip).toCypher
   ]
 
+def joseTrialSoA : SoA :=
+  { name := "OurTrial"
+    interactions :=
+      [{ id := "screening", name := "Screening Visit"
+         phase := .screening
+         timing := { nominalDay := 0 } }
+      ,{ id := "drugDose", name := "Drug Administration"
+         phase := .treatment
+         timing := { nominalDay := 7, windowBefore := 2, windowAfter := 2 }
+         repeating := some (.every 7 (.fixed 3)) }
+      ,{ id := "weeklyCheckup", name := "Weekly Checkup"
+         phase := .followUp
+         timing := { nominalDay := 0 }
+         repeating := some (.every 7 .death) }]
+    activities :=
+      [{ id := "consent",       name := "Informed consent",     category := .initiation }
+      ,{ id := "physicalExam",  name := "Physical examination", category := .clinical }
+      ,{ id := "vitalSigns",   name := "Vital signs",          category := .clinical }
+      ,{ id := "assessment",    name := "Clinical assessment",  category := .clinical }
+      ,{ id := "drugAdmin",    name := "Drug administration",  category := .intervention }
+      ,{ id := "aeCollection", name := "Adverse events",       category := .safety }
+      ,{ id := "survivalCheck", name := "Survival status",      category := .safety }
+      ,{ id := "disqualify",   name := "Disqualification",     category := .initiation }]
+    edges :=
+      [SoAEdge.follows "screening" "drugDose" { minDays := 5, maxDays := some 9 }
+      ,SoAEdge.follows "drugDose" "weeklyCheckup" { minDays := 0 }
+      ,SoAEdge.performs "screening" "consent"      .required
+      ,SoAEdge.performs "screening" "physicalExam" .required
+      ,SoAEdge.performs "screening" "vitalSigns"   .required
+      ,SoAEdge.performs "screening" "assessment"   .required
+      ,SoAEdge.performs "screening" "disqualify"   (.conditional "if exclusion criteria met")
+      ,SoAEdge.performs "drugDose" "drugAdmin"    .required
+      ,SoAEdge.performs "drugDose" "vitalSigns"   .required
+      ,SoAEdge.performs "drugDose" "aeCollection" .required
+      ,SoAEdge.performs "weeklyCheckup" "vitalSigns"    .required
+      ,SoAEdge.performs "weeklyCheckup" "assessment"    .required
+      ,SoAEdge.performs "weeklyCheckup" "aeCollection"  .required
+      ,SoAEdge.performs "weeklyCheckup" "survivalCheck" .required
+      ,SoAEdge.requires "physicalExam" "consent"
+      ,SoAEdge.requires "drugAdmin"    "consent"
+      ,SoAEdge.requires "assessment"   "physicalExam"] }
+
 def main : IO Unit := do
   for stmt in allCypher do
     IO.println (stmt ++ ";")
   for stmt in allCatalogCypher do
+    IO.println (stmt ++ ";")
+  -- SoA graph
+  for stmt in joseTrialSoA.toCypher do
     IO.println (stmt ++ ";")

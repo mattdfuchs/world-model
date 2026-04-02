@@ -23,6 +23,10 @@ You are a Lean 4 proof agent. You receive a pipeline description from the Design
 (Clinic)-[:isIn]->(City), -[:clinicHasRoom]->(Room {name})
 (Room)-[:roomHasExamBed]->(ExamBed), -[:roomHasBPMonitor]->(BPMonitor), -[:roomHasVO2Equip]->(VO2Equipment)
 (ClinicalTrial {name})-[:trialApproves]->(Clinic)
+
+(ActionSpec {name,description})-[:REQUIRES {role}]->(*), -[:PRODUCES]->(*)
+(Constraint)-[:REQUIRES_EVIDENCE]->(OutputType)
+(Activity)-[:IMPLEMENTED_BY]->(ActionSpec)
 ```
 
 Gather ALL facts in a single batched query, e.g.: `MATCH (h:Human) WHERE h.name IN ['Jose','Allen'] OPTIONAL MATCH (h)-[:speaks]->(l) OPTIONAL MATCH (h)-[:hasRole]->(r) OPTIONAL MATCH (h)-[:assigned]->(c) OPTIONAL MATCH (h)-[:hasQualification]->(q) RETURN h.name, collect(DISTINCT l.name) as languages, collect(DISTINCT r.name) as roles, collect(DISTINCT c.name) as clinics, collect(DISTINCT labels(q)) as quals`
@@ -35,13 +39,20 @@ Gather ALL facts in a single batched query, e.g.: `MATCH (h:Human) WHERE h.name 
 import WorldModel.KB.Arrow
 ```
 
-This transitively imports everything. Do NOT use `open` statements — they cause errors. Do NOT open `KB.Facts` — define ALL entities and facts inline from Neo4j queries.
+This transitively imports everything (Arrow, SheetDiagram, Iterate, Scope, Clinical types). Do NOT use `open` statements — they cause errors. Do NOT open `KB.Facts` — define ALL entities and facts inline from Neo4j queries.
 
 ### Naming — avoid collisions
 
-Prefix ALL your `abbrev` and `def` names with the patient's name (e.g., `jose`):
+Wrap ALL code in a `namespace` using the patient's name:
+```lean
+namespace JosePipeline
+-- ... all definitions here ...
+end JosePipeline
+```
+
+Prefix `abbrev` and `def` names with the patient's name (e.g., `jose`):
 - `josePatientCtx`, `joseTrialExt`, `joseClinicExt`, `joseRoomExt`, `joseFullCtx`
-- `joseConsentArrow`, `joseHeartArrow`, `joseNqArrow`, `josePipeline`
+- `joseConsentArrow`, `joseNqArrow`, `josePipeline`
 
 ### Step 1: Define entities and facts inline
 
@@ -50,18 +61,13 @@ Query Neo4j, then define everything with constructors. Types available via impor
 - Equipment: `ExamBed.mk`, `BPMonitor.mk`, `VO2Equipment.mk` (unit types)
 - Relations: `speaks.mk`, `holdsExamBedQual.mk`, `holdsBPMonitorQual.mk`, `holdsVO2EquipmentQual.mk`
 - Clinical: `Patient.mk "Name"`, `Clinician.mk "Name"`
-- Measurements (NOT `.mk` — named constructors):
-  - `HeartRate.heartRate : Patient name → Int → HeartRate name`
-  - `BloodPressure.bloodPressure : Patient name → Rat → BloodPressure name`
-  - `VO2Max.vO2Max : Patient name → Int → VO2Max name`
-- Outputs (NOT `.mk` — named constructors):
-  - `ProductsOutput.products : String → Int → Rat → Int → ProductsOutput name`
-  - `AssessmentResult.success : Patient name → String → Int → Rat → Int → AssessmentResult name`
-  - `AssessmentResult.failure : Patient name → String → AssessmentResult name`
-- Other:
-  - `ConsentGiven.mk : Patient name → String → ConsentGiven name`
-  - `NonQualifying.mk : Patient name → DisqualificationReason → NonQualifying name`
-  - `SharedLangEvidence` is a structure — build with `{ lang := "...", cSpeaks := ..., pSpeaks := ... }`
+- Evidence structures:
+  - `SharedLangEvidence` — build with `{ lang := "...", cSpeaks := ..., pSpeaks := ... }`
+  - `ClinicCityEvidence` — build with `{ city := "...", cIsIn := ..., pLives := ... }`
+- Consent/DQ: `ConsentGiven.mk : Patient name → String → ConsentGiven name`, `NonQualifying.mk : Patient name → DisqualificationReason → NonQualifying name`
+- Call evidence: `CallConfirmed.mk : (patientName : String) → CallConfirmed patientName`
+- Drug types: `AdminRecord.mk`, `AEReport.mk`, `SurvivalStatus.mk`, `DrugDose.mk`
+- Obligation types: `Obligation.mk : (vid : String) → Obligation vid`, `Fulfilled.mk`, `BoundedObligation.mk : (vid : String) → (n : Nat) → BoundedObligation vid n`
 
 ```lean
 def joseH : Human "Jose" := Human.mk "Jose"
@@ -69,170 +75,344 @@ def allenH : Human "Allen" := Human.mk "Allen"
 def jose_speaks_spanish : speaks joseH (Language.mk "Spanish") := speaks.mk
 def allen_speaks_spanish : speaks allenH (Language.mk "Spanish") := speaks.mk
 def allen_holds_exambed : holdsExamBedQual allenH .mk := holdsExamBedQual.mk
+-- ... etc for all KB facts ...
 ```
 
-Build `SharedLangEvidence` from individual speaks facts:
+Build evidence from individual facts:
 ```lean
 def joseLangEv : SharedLangEvidence "Allen" "Jose" :=
   { lang := "Spanish", cSpeaks := allen_speaks_spanish, pSpeaks := jose_speaks_spanish }
+def joseCityEv : ClinicCityEvidence "ValClinic" "Jose" :=
+  { city := "Valencia", cIsIn := valClinic_in_valencia, pLives := jose_lives_valencia }
 ```
 
-### Step 2: Define contexts
+### Step 2: Define contexts and scope state
+
+Contexts (`Ctx`) are lists of types. Scope state (`ScopeState`) is a list of `ScopeItem`.
 
 ```lean
-abbrev josePatientCtx : Ctx := [Patient "Jose"]
+-- Patient context (outermost)
+abbrev joseCtx : Ctx := [Patient "Jose"]
+abbrev joseInitState : ScopeState := [.entry ⟨"Jose", .patient⟩]
+
+-- Scope extensions — what each scope introduces into the context
 abbrev joseTrialExt : Ctx := [ClinicalTrial "OurTrial"]
 abbrev joseClinicExt : Ctx := [Clinic "ValClinic", Clinician "Allen",
                                 SharedLangEvidence "Allen" "Jose"]
 abbrev joseRoomExt : Ctx := [Room "Room3", ExamBed, BPMonitor, VO2Equipment,
                               holdsExamBedQual allenH .mk, holdsBPMonitorQual allenH .mk,
                               holdsVO2EquipmentQual allenH .mk]
-abbrev joseFullCtx : Ctx := joseRoomExt ++ (joseClinicExt ++ (joseTrialExt ++ josePatientCtx))
+
+-- Full inner context: room ++ clinic ++ trial ++ patient
+abbrev joseFullCtx : Ctx := joseRoomExt ++ (joseClinicExt ++ (joseTrialExt ++ joseCtx))
+
+-- Scope items — define entries and constraints for each scope level
+abbrev joseTrialItems : List ScopeItem :=
+  [.entry ⟨"OurTrial", .trial⟩, .constraint .clinicianSpeaksPatient]
+abbrev joseClinicItems : List ScopeItem :=
+  [.entry ⟨"ValClinic", .clinic⟩, .entry ⟨"Allen", .clinician⟩,
+   .constraint .clinicInPatientCity, .constraint .clinicianAssigned,
+   .constraint .trialApprovesClinic]
+abbrev joseRoomItems : List ScopeItem :=
+  [.entry ⟨"Room3", .room⟩,
+   .entry ⟨"Allen", .examBedTech⟩, .entry ⟨"Allen", .bpTech⟩, .entry ⟨"Allen", .vo2Tech⟩,
+   .constraint .examBedQual, .constraint .bpQual, .constraint .vo2Qual]
+
+-- Full scope state inside all scopes
+abbrev joseRoomState : ScopeState :=
+  joseRoomItems ++ (joseClinicItems ++ (joseTrialItems ++ joseInitState))
 ```
 
-### Step 3: Build Arrow steps
+**Obligation types** must be spelled out explicitly (the `newObligations` function can't reduce at type-checking time):
+```lean
+abbrev joseTrialObligations : List Type := []
+abbrev joseClinicObligations : List Type :=
+  [ClinicCityEvidence "ValClinic" "Jose",
+   assigned (Human.mk "Allen") (Clinic.mk "ValClinic"),
+   trialApproves (ClinicalTrial.mk "OurTrial") (Clinic.mk "ValClinic"),
+   SharedLangEvidence "Allen" "Jose"]
+abbrev joseRoomObligations : List Type :=
+  [holdsExamBedQual (Human.mk "Allen") .mk,
+   holdsBPMonitorQual (Human.mk "Allen") .mk,
+   holdsVO2EquipmentQual (Human.mk "Allen") .mk]
+```
+
+### Step 3: Build Arrow steps with `mkArrow`
+
+Use the `mkArrow` helper — NOT raw `.step`. It takes a name, input types, output types, and a `Satisfy` proof:
+
+```lean
+mkArrow (name : String) (inputs produces : Ctx)
+    (satisfy : Satisfy (Tel.ofList inputs) Γ Γ) : Arrow Γ (Γ ++ produces)
+```
 
 **Use `(by elem_tac)` for ALL Elem proofs** — never write `.here`/`.there` manually.
 
 **CRITICAL rules:**
-- **Always `consumes := []`** — the framework does not support consumption at the type level
-- **Always pass the full input context as `frame`** — if the arrow is `Arrow Γ Δ`, pass `Γ` as frame
-- Output type is always `Γ ++ spec.produces`
+- `mkArrow` always sets `consumes := []` — the framework does not support consumption at the type level
+- Output type is always `Γ ++ produces` where `Γ` is the current context
 
 ```lean
+-- Consent arrow: operates on full context, produces ConsentGiven
 def joseConsentArrow : Arrow joseFullCtx (joseFullCtx ++ [ConsentGiven "Jose"]) :=
-  .step
-    { name := "consent"
-      inputs := Tel.ofList [Patient "Jose", SharedLangEvidence "Allen" "Jose"]
-      consumes := []
-      produces := [ConsentGiven "Jose"] }
-    joseFullCtx    -- frame = ALWAYS the full input context
+  mkArrow "consent"
+    [Patient "Jose", SharedLangEvidence "Allen" "Jose"]
+    [ConsentGiven "Jose"]
     (.bind (Patient.mk "Jose") (by elem_tac)
       (.bind joseLangEv (by elem_tac)
         .nil))
 
--- Measurement arrows follow the same pattern:
+-- Assessment arrow: operates on context after consent
 abbrev joseAfterConsent : Ctx := joseFullCtx ++ [ConsentGiven "Jose"]
 
-def joseHeartArrow : Arrow joseAfterConsent (joseAfterConsent ++ [HeartRate "Jose"]) :=
-  .step
-    { name := "heartMeasurement"
-      inputs := Tel.ofList [Patient "Jose", Clinician "Allen", ExamBed,
-                            holdsExamBedQual allenH .mk, SharedLangEvidence "Allen" "Jose"]
-      consumes := []
-      produces := [HeartRate "Jose"] }
-    joseAfterConsent
+def joseAssessmentArrow : Arrow joseAfterConsent
+    (joseAfterConsent ++ [AssessmentResult "Jose"]) :=
+  mkArrow "assessment"
+    [Patient "Jose", ConsentGiven "Jose"]
+    [AssessmentResult "Jose"]
     (.bind (Patient.mk "Jose") (by elem_tac)
-      (.bind (Clinician.mk "Allen") (by elem_tac)
-        (.bind ExamBed.mk (by elem_tac)
-          (.bind holdsExamBedQual.mk (by elem_tac)
-            (.bind joseLangEv (by elem_tac)
-              .nil)))))
+      (.bind (ConsentGiven.mk (Patient.mk "Jose") "signed") (by elem_tac)
+        .nil))
 ```
 
-For products arrow — inputs are NOT consumed, just referenced:
+### Step 4: Build screening with branching
+
+Screening has two branch points: consent refusal and post-assessment disqualification. Branching happens at room scope level (NOT inside a visit scope).
+
+**Helpers needed:**
+
 ```lean
-def joseProductsArrow : Arrow joseAfterVO2 (joseAfterVO2 ++ [ProductsOutput "Jose"]) :=
-  .step
-    { name := "products"
-      inputs := Tel.ofList [HeartRate "Jose", BloodPressure "Jose", VO2Max "Jose"]
-      consumes := []
-      produces := [ProductsOutput "Jose"] }
-    joseAfterVO2
-    (.bind (HeartRate.heartRate (Patient.mk "Jose") 72) (by elem_tac)
-      (.bind (BloodPressure.bloodPressure (Patient.mk "Jose") 120) (by elem_tac)
-        (.bind (VO2Max.vO2Max (Patient.mk "Jose") 45) (by elem_tac)
-          .nil)))
-```
+-- Polymorphic selection: drops extras to get back to fullCtx for NQ branch
+def joseFullCtxSel {extra : Ctx}
+    : Selection (joseFullCtx ++ extra) joseFullCtx :=
+  Selection.prefix joseFullCtx extra
 
-### Step 4: Build branching with SheetDiagram
-
-Each measurement can fail → `NonQualifying`. Failure branches are joined.
-
-**Disqualification arrow** (always operates on `fullCtx`):
-```lean
+-- Disqualification arrow: produces NonQualifying from Patient
 def joseNqArrow : Arrow joseFullCtx (joseFullCtx ++ [NonQualifying "Jose"]) :=
-  .step
-    { name := "disqualify"
-      inputs := Tel.ofList [Patient "Jose"]
-      consumes := []
-      produces := [NonQualifying "Jose"] }
-    joseFullCtx
+  mkArrow "disqualify"
+    [Patient "Jose"]
+    [NonQualifying "Jose"]
     (.bind (Patient.mk "Jose") (by elem_tac) .nil)
+
+-- Context after consent + assessment (second branch point)
+abbrev joseAfterAssessment : Ctx :=
+  (joseFullCtx ++ [ConsentGiven "Jose"]) ++ [AssessmentResult "Jose"]
+
+-- Drop screening results to return to fullCtx
+def joseDropScreening :
+    Split joseAfterAssessment
+          [ConsentGiven "Jose", AssessmentResult "Jose"] joseFullCtx :=
+  Split.append joseFullCtx [ConsentGiven "Jose", AssessmentResult "Jose"]
+    |>.comm
 ```
 
-**Selections for failure branches** — `Selection.prefix Γ extra` has type `Selection (Γ ++ extra) Γ`:
-```lean
--- First branch: no extras yet
-def joseScopeSel : Selection joseFullCtx joseFullCtx := Selection.prefix joseFullCtx []
--- After consent: extras = [ConsentGiven]
-def joseConsentFailSel : Selection joseAfterConsent joseFullCtx :=
-  Selection.prefix joseFullCtx [ConsentGiven "Jose"]
--- After heart: extras = [ConsentGiven, HeartRate]
-def joseHeartFailSel : Selection joseAfterHeart joseFullCtx :=
-  Selection.prefix joseFullCtx [ConsentGiven "Jose", HeartRate "Jose"]
--- After BP: extras = [ConsentGiven, HeartRate, BloodPressure]
-def joseBPFailSel : Selection joseAfterBP joseFullCtx :=
-  Selection.prefix joseFullCtx [ConsentGiven "Jose", HeartRate "Jose", BloodPressure "Jose"]
-```
+**Branching pattern** (2 branches, 1 join):
 
-**Nested branch-join pattern** (4 branches, 3 joins):
 ```lean
-.join (.join (.join
+.join
   (.branch (Split.idLeft joseFullCtx)
-    joseScopeSel (Selection.id joseFullCtx)
-    (.arrow joseNqArrow)
+    joseFullCtxSel (Selection.id joseFullCtx)
+    (.arrow joseNqArrow)                          -- consent refused → NQ
     (.pipe joseConsentArrow
-      (.branch (Split.idLeft joseAfterConsent)
-        joseConsentFailSel (Selection.id joseAfterConsent)
-        (.arrow joseNqArrow)
-        (.pipe joseHeartArrow
-          (.branch (Split.idLeft joseAfterHeart)
-            joseHeartFailSel (Selection.id joseAfterHeart)
-            (.arrow joseNqArrow)
-            (.pipe joseBPArrow
-              (.branch (Split.idLeft joseAfterBP)
-                joseBPFailSel (Selection.id joseAfterBP)
-                (.arrow joseNqArrow)
-                (.pipe joseVO2Arrow
-                  (.pipe joseProductsArrow
-                    (.arrow joseAssessmentArrow))))))))))))
+      (.pipe joseAssessmentArrow
+        (.branch (Split.idLeft joseAfterAssessment)
+          joseFullCtxSel (Selection.id joseAfterAssessment)
+          (.arrow joseNqArrow)                    -- post-assessment NQ
+          (.pipe (.drop joseDropScreening)
+            (.seq drugPhase checkupPhase))))))     -- success → continue
 ```
 
 **Key rules:**
-1. `.branch` operates on the CURRENT context (after preceding `.pipe`)
-2. `Split.idLeft currentCtx` — use the post-pipe context
-3. Failure Selection source type is the extended context: `Selection joseAfterConsent joseFullCtx`
-4. ALL failure branches must produce the SAME output type for `.join` to work
-5. N failure branches need N-1 `.join`s
+1. `.branch` splits the CURRENT context — use `Split.idLeft currentCtx`
+2. Failure `Selection` uses `joseFullCtxSel` which drops any extras accumulated after `fullCtx`
+3. Success `Selection` uses `Selection.id currentCtx` to keep everything
+4. ALL failure branches produce `[fullCtx ++ [NonQualifying "Jose"]]` for `.join` to unify
+5. N failure paths produce N copies of the NQ outcome; N-1 `.join`s collapse them
+6. The success path drops intermediate results (ConsentGiven, AssessmentResult) before continuing
 
-### Step 5: Wrap in scopes
+### Step 5: Iteration — bounded and unbounded phases
+
+#### Bounded iteration (drug doses × N)
+
+Uses `boundedIterate` combinator. You provide a body factory `mkBody k` that handles iteration `k`.
+
+Each iteration body must:
+1. Start with `[BoundedObligation vid (k+1)] ++ Γ` in context
+2. Produce `[BoundedObligation vid k] ++ Γ` as output
+3. Handle the obligation threading: produce new counter, drop old counter, swap to front
 
 ```lean
-.scope "trial" joseTrialExt
-  (.scope "clinic" joseClinicExt
-    (.scope "room" joseRoomExt
-      (... inner pipeline ...)))
+-- Visit-level scope items and obligations (for drug and checkup visits)
+abbrev joseVisitItems : List ScopeItem := [.constraint .callConfirmed]
+abbrev joseVisitObligations : List Type := [CallConfirmed "Jose"]
+def jose_call_confirmed : CallConfirmed "Jose" := .mk "Jose"
+abbrev joseVisitState : ScopeState := joseVisitItems ++ joseRoomState
+
+-- Drug admin arrow: obligation at front of context
+def joseDrugArrow (k : Nat) :
+    Arrow ([BoundedObligation "drugDose" (k+1)] ++ joseFullCtx)
+          (([BoundedObligation "drugDose" (k+1)] ++ joseFullCtx)
+            ++ [BoundedObligation "drugDose" k]) :=
+  mkArrow "drugAdmin"
+    [BoundedObligation "drugDose" (k+1), Patient "Jose", Clinician "Allen"]
+    [BoundedObligation "drugDose" k]
+    (.bind (BoundedObligation.mk "drugDose" (k+1)) (by elem_tac)
+      (.bind (Patient.mk "Jose") (by elem_tac)
+        (.bind (Clinician.mk "Allen") (by elem_tac)
+          .nil)))
+
+-- Drop old obligation, reorder new one to front
+def joseDropBounded (k : Nat) :
+    Split (([BoundedObligation "drugDose" (k+1)] ++ joseFullCtx)
+            ++ [BoundedObligation "drugDose" k])
+          [BoundedObligation "drugDose" (k+1)]
+          (joseFullCtx ++ [BoundedObligation "drugDose" k]) :=
+  .left (Split.idRight (joseFullCtx ++ [BoundedObligation "drugDose" k]))
+
+def joseReorderBounded (k : Nat) :
+    Arrow (joseFullCtx ++ [BoundedObligation "drugDose" k])
+          ([BoundedObligation "drugDose" k] ++ joseFullCtx) :=
+  Arrow.swap (Γ₁ := joseFullCtx) (Γ₂ := [BoundedObligation "drugDose" k])
+
+-- Inner body (runs inside visit scope)
+def joseDrugInner (k : Nat) : SheetDiagram joseVisitState
+    ([BoundedObligation "drugDose" (k+1)] ++ joseFullCtx) joseVisitState
+    [[BoundedObligation "drugDose" k] ++ joseFullCtx] :=
+  .pipe (joseDrugArrow k)
+    (.pipe (.drop (joseDropBounded k))
+      (.arrow (joseReorderBounded k)))
+
+-- Visit scope wrapping inner body (provides callConfirmed)
+def joseDrugVisit (k : Nat) : SheetDiagram joseRoomState
+    ([BoundedObligation "drugDose" (k+1)] ++ joseFullCtx) joseRoomState
+    [[BoundedObligation "drugDose" k] ++ joseFullCtx] :=
+  .scope "dose-visit" joseVisitItems ([] : Ctx) ([] : Ctx) joseRoomState
+    joseVisitObligations jose_call_confirmed
+    (joseDrugInner k)
+
+-- Complete drug phase: 3 iterations
+def joseDrugPhase : SheetDiagram joseRoomState joseFullCtx joseRoomState [joseFullCtx] :=
+  boundedIterate "drugDose" "drug-dose" joseDrugVisit 3
 ```
 
-Each scope strips its extension from outputs. The top-level type uses `patientCtx`-based contexts only:
+#### Unbounded iteration (weekly checkups)
+
+Uses `unboundedStep` combinator. Body must consume `Obligation vid` and produce `Fulfilled vid`.
+
 ```lean
-def josePipeline : SheetDiagram josePatientCtx
-    [[Patient "Jose", NonQualifying "Jose"],
-     josePatientCtx ++ [ConsentGiven "Jose", HeartRate "Jose",
-                  BloodPressure "Jose", VO2Max "Jose",
-                  ProductsOutput "Jose", AssessmentResult "Jose"]] :=
-  .scope "trial" joseTrialExt
-    (.scope "clinic" joseClinicExt
-      (.scope "room" joseRoomExt
-        (... branches ...)))
+-- Checkup arrow: Obligation at front, produces Fulfilled
+def joseCheckupArrow :
+    Arrow ([Obligation "weeklyCheckup"] ++ joseFullCtx)
+          (([Obligation "weeklyCheckup"] ++ joseFullCtx)
+            ++ [Fulfilled "weeklyCheckup"]) :=
+  mkArrow "checkup"
+    [Obligation "weeklyCheckup", Patient "Jose", Clinician "Allen"]
+    [Fulfilled "weeklyCheckup"]
+    (.bind (Obligation.mk "weeklyCheckup") (by elem_tac)
+      (.bind (Patient.mk "Jose") (by elem_tac)
+        (.bind (Clinician.mk "Allen") (by elem_tac)
+          .nil)))
+
+-- Drop consumed Obligation, reorder Fulfilled to front
+def joseDropCheckupObl :
+    Split (([Obligation "weeklyCheckup"] ++ joseFullCtx)
+            ++ [Fulfilled "weeklyCheckup"])
+          [Obligation "weeklyCheckup"]
+          (joseFullCtx ++ [Fulfilled "weeklyCheckup"]) :=
+  .left (Split.idRight (joseFullCtx ++ [Fulfilled "weeklyCheckup"]))
+
+def joseReorderFulfilled :
+    Arrow (joseFullCtx ++ [Fulfilled "weeklyCheckup"])
+          ([Fulfilled "weeklyCheckup"] ++ joseFullCtx) :=
+  Arrow.swap (Γ₁ := joseFullCtx) (Γ₂ := [Fulfilled "weeklyCheckup"])
+
+-- Inner body (runs inside visit scope)
+def joseCheckupInner : SheetDiagram joseVisitState
+    ([Obligation "weeklyCheckup"] ++ joseFullCtx) joseVisitState
+    [[Fulfilled "weeklyCheckup"] ++ joseFullCtx] :=
+  .pipe joseCheckupArrow
+    (.pipe (.drop joseDropCheckupObl)
+      (.arrow joseReorderFulfilled))
+
+-- Visit scope wrapping inner body
+def joseCheckupVisit : SheetDiagram joseRoomState
+    ([Obligation "weeklyCheckup"] ++ joseFullCtx) joseRoomState
+    [[Fulfilled "weeklyCheckup"] ++ joseFullCtx] :=
+  .scope "checkup-visit" joseVisitItems ([] : Ctx) ([] : Ctx) joseRoomState
+    joseVisitObligations jose_call_confirmed
+    joseCheckupInner
+
+-- Complete checkup phase
+def joseCheckupPhase : SheetDiagram joseRoomState joseFullCtx joseRoomState [joseFullCtx] :=
+  unboundedStep "weeklyCheckup" "weekly-checkup" joseCheckupVisit
 ```
 
-### Step 6: Erase and pretty-print
+### Step 6: Compose the inner pipeline
+
+The inner pipeline combines screening (with branching) + drug phase + checkup phase:
+
+```lean
+def joseInnerPipeline : SheetDiagram joseRoomState joseFullCtx joseRoomState
+    [joseFullCtx ++ [NonQualifying "Jose"], joseFullCtx] :=
+  .join
+    (.branch (Split.idLeft joseFullCtx)
+      joseFullCtxSel (Selection.id joseFullCtx)
+      (.arrow joseNqArrow)
+      (.pipe joseConsentArrow
+        (.pipe joseAssessmentArrow
+          (.branch (Split.idLeft joseAfterAssessment)
+            joseFullCtxSel (Selection.id joseAfterAssessment)
+            (.arrow joseNqArrow)
+            (.pipe (.drop joseDropScreening)
+              (.seq joseDrugPhase joseCheckupPhase))))))
+```
+
+**Output type**: `[fullCtx ++ [NonQualifying "Jose"], fullCtx]` — two outcomes (NQ or success).
+
+### Step 7: Wrap in outer scopes
+
+```lean
+def josePipeline : SheetDiagram joseInitState joseCtx joseInitState
+    [joseCtx ++ [NonQualifying "Jose"], joseCtx] :=
+  .scope "trial" joseTrialItems joseTrialExt joseTrialExt joseInitState
+    joseTrialObligations PUnit.unit
+    (.scope "clinic" joseClinicItems joseClinicExt joseClinicExt
+        (joseTrialItems ++ joseInitState)
+      joseClinicObligations
+      (joseCityEv, allen_assigned_val, trial_approves_val, joseLangEv)
+      (.scope "room" joseRoomItems joseRoomExt joseRoomExt
+          (joseClinicItems ++ (joseTrialItems ++ joseInitState))
+        joseRoomObligations
+        (allen_holds_exambed, allen_holds_bpmonitor, allen_holds_vo2equip)
+        joseInnerPipeline))
+```
+
+Each scope strips its extension from outputs. The `kept` context for each scope equals `ext` (trial, clinic, room extensions are all preserved).
+
+### Step 8: Erase and pretty-print
 
 ```lean
 #eval toString (Erased.erase josePipeline)
 ```
+
+## Scope constructor reference
+
+```lean
+.scope (label : String)
+       (newItems : List ScopeItem)    -- constraints + entries pushed onto state
+       (ext : Ctx)                    -- types added to context on entry
+       (kept : Ctx)                   -- types reclaimed on exit (stripped from outputs)
+       (st_out : ScopeState)          -- parent state restored on exit
+       (obligations : List Type)      -- proof obligations from newItems
+       (evidence : AllObligations obligations)  -- evidence satisfying obligations
+       (body : SheetDiagram ...)      -- inner diagram
+```
+
+**Visit scopes** have `ext = []`, `kept = []` — they only fire constraints (like callConfirmed), don't add or reclaim resources.
+
+**Iteration combinators** handle scope creation internally:
+- `boundedIterate vid label mkBody n` — creates n scope blocks with BoundedObligation management
+- `unboundedStep vid label body` — creates one scope block with Obligation/Fulfilled management
 
 ## Pushing back to the Designer
 
@@ -250,23 +430,21 @@ On success, include:
 
 ```mermaid
 graph TD
-    START([Patient]) --> CONSENT[consent]
-    CONSENT -->|refuse| DQ1[disqualify]
-    CONSENT -->|grant| HEART[heartMeasurement]
-    HEART -->|fail| DQ2[disqualify]
-    HEART -->|pass| BP[bpMeasurement]
-    BP -->|fail| DQ3[disqualify]
-    BP -->|pass| VO2[vo2Measurement]
-    VO2 -->|fail| DQ4[disqualify]
-    VO2 -->|pass| PROD[products]
-    PROD --> ASSESS[assessment]
-    DQ1 --> NQ([NonQualifying])
-    DQ2 --> NQ
-    DQ3 --> NQ
-    DQ4 --> NQ
-    ASSESS --> OK([Qualified])
+    START([Patient]) --> B1{branch}
+    B1 -->|refuse| DQ1[disqualify]
+    B1 -->|ok| CONSENT[consent]
+    CONSENT --> ASSESS[assessment]
+    ASSESS --> B2{branch}
+    B2 -->|NQ| DQ2[disqualify]
+    B2 -->|qualify| DROP[drop results]
+    DQ1 --> JOIN((join))
+    DQ2 --> JOIN
+    JOIN --> NQ([NonQualifying])
+    DROP --> DRUG["Drug Doses (×3)\nboundedIterate"]
+    DRUG --> CHECK["Weekly Checkups\nunboundedStep"]
+    CHECK --> OK([Qualified])
     style NQ fill:#f66,stroke:#333
     style OK fill:#6f6,stroke:#333
 ```
 
-Example start: `VERIFIED: Built a 6-stage clinical pipeline for [patient] with 4 branch points...`
+Example start: `VERIFIED: Built a multi-phase clinical pipeline for [patient] with screening (2 branch points, consent refusal + post-assessment NQ), 3 bounded drug doses, and unbounded weekly checkups...`
