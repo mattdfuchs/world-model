@@ -9,7 +9,6 @@
   `eraseArrow` and `erase` formally connect the typed and untyped worlds.
 -/
 import WorldModel.KB.Arrow.SheetDiagram
-import WorldModel.KB.Arrow.Clinical
 
 namespace Erased
 
@@ -49,9 +48,6 @@ def erase : SheetDiagram st Γ st' Δs → Pipeline
   | .cup label _ _            => .cup label
   | .cap label _ _ _          => .cap label
 
-/-- The clinical pipeline with all proof content erased. -/
-def clinicalPipeline : Pipeline := erase JoseExample.scopedClinicalPipeline
-
 /-- Indented string representation for pretty-printing. -/
 partial def Pipeline.format (p : Pipeline) (indent : Nat) : String :=
   let pad := String.mk (List.replicate (indent * 2) ' ')
@@ -69,7 +65,5 @@ partial def Pipeline.format (p : Pipeline) (indent : Nat) : String :=
 
 instance : ToString Pipeline where
   toString p := p.format 0
-
-#eval toString clinicalPipeline
 
 end Erased

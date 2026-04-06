@@ -175,6 +175,46 @@ def lean_file(request: LeanFileRequest) -> dict:
     return {"ok": True, "result": result}
 
 
+# Files to serve, with optional line ranges.
+# (path, line_ranges | None)
+# None = full file; list of (start, end) tuples = specific lines only (1-indexed, inclusive).
+DOMAIN_TYPE_FILES: list[tuple[str, list[tuple[int, int]] | None]] = [
+    ("WorldModel/KB/Types.lean",          [(1, 35), (44, 56)]),   # skip Role (38-42)
+    ("WorldModel/KB/Relations.lean",      [(1, 6), (10, 21)]),    # skip hasRole (7-9)
+    ("WorldModel/KB/Arrow/Clinical.lean", [(21, 65), (107, 140)]),# domain + evidence types
+    ("WorldModel/KB/Arrow/Scope.lean",    None),                  # all essential (56 lines)
+    ("WorldModel/KB/Arrow/Compile.lean",  [(22, 118), (156, 219), (285, 357)]),
+        # scope infra (22-118), drug phase (156-219), full assembly (285-357)
+        # skips: screening helpers, checkup (identical to drug), #eval
+]
+
+
+@app.get("/lean/domain-types")
+def lean_domain_types() -> dict:
+    """Return domain type definitions and a reference implementation.
+
+    Serves curated line ranges per file to minimize token count
+    while keeping everything the Prover needs.
+    """
+    lean_path = _find_lean_project()
+    sections: list[str] = []
+    for rel, ranges in DOMAIN_TYPE_FILES:
+        fp = lean_path / rel
+        if fp.exists():
+            text = fp.read_text()
+            if ranges is not None:
+                all_lines = text.split("\n")
+                selected: list[str] = []
+                for start, end in ranges:
+                    selected.extend(all_lines[start - 1 : end])
+                    selected.append("")
+                text = "\n".join(selected)
+            sections.append(f"-- ═══ {rel} ═══\n{text}")
+        else:
+            sections.append(f"-- ═══ {rel} ═══\n-- FILE NOT FOUND")
+    return {"ok": True, "source": "\n\n".join(sections)}
+
+
 class CypherRequest(BaseModel):
     query: str
 

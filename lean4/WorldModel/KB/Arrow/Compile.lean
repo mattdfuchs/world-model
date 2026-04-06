@@ -6,7 +6,7 @@
     SoA (what happens) + KB facts (who, where, with what) → SheetDiagram (proof term)
 
   Three visit phases:
-    1. Screening (one-shot): consent + assessment with NQ branching (2 branch points)
+    1. Screening (one-shot): consent + measurements + products + assessment with NQ branching
     2. Drug administration (bounded × 3): `boundedIterate` with callConfirmed
     3. Weekly checkups (unbounded): `unboundedStep` with callConfirmed
 
@@ -15,6 +15,7 @@
   The SoA says WHAT happens; constraints say WHAT MUST BE TRUE when it happens.
 -/
 import WorldModel.KB.Arrow.Iterate
+import WorldModel.KB.Arrow.Action
 
 open KB.Facts
 
@@ -120,35 +121,20 @@ abbrev visitState : ScopeState := visitItems ++ roomState
 -- Phase 1: Screening visit (one-shot)
 -- ══════════════════════════════════════════════════════════════════════════
 
-/-  Screening: branch (consent refusal) → consent → assessment → branch (NQ).
+/-  Screening: branch (consent refusal) → consent → heart → BP → VO₂ →
+    products → assessment → branch (NQ).
     No visit-level callConfirmed scope — branching happens at room level.
     Drug and checkup phases keep their own callConfirmed scopes. -/
 
-/-- Consent arrow: obtains informed consent. -/
-def screeningConsent : Arrow insideAllScopes (insideAllScopes ++ [ConsentGiven "Jose"]) :=
-  mkArrow "consent"
-    [Patient "Jose", SharedLangEvidence "Allen" "Jose"]
-    [ConsentGiven "Jose"]
-    (.bind (Patient.mk "Jose") (by elem_tac)
-      (.bind allenJoseLangEvidence (by elem_tac)
-        .nil))
+/-- All types produced during the screening measurement pipeline. -/
+abbrev screeningProduced : Ctx :=
+  [ConsentGiven "Jose", HeartRate "Jose", BloodPressure "Jose",
+   VO2Max "Jose", ProductsOutput "Jose", AssessmentResult "Jose"]
 
-/-- Assessment arrow: evaluates the patient (after consent). -/
-def screeningAssessment : Arrow (insideAllScopes ++ [ConsentGiven "Jose"])
-    ((insideAllScopes ++ [ConsentGiven "Jose"]) ++ [AssessmentResult "Jose"]) :=
-  mkArrow "assessment"
-    [Patient "Jose", ConsentGiven "Jose"]
-    [AssessmentResult "Jose"]
-    (.bind (Patient.mk "Jose") (by elem_tac)
-      (.bind (ConsentGiven.mk (Patient.mk "Jose") "signed") (by elem_tac)
-        .nil))
-
-/-- Drop screening results (ConsentGiven + AssessmentResult) to return to insideAllScopes. -/
+/-- Drop all screening results to return to insideAllScopes. -/
 def dropScreeningResults :
-    Split ((insideAllScopes ++ [ConsentGiven "Jose"]) ++ [AssessmentResult "Jose"])
-          [ConsentGiven "Jose", AssessmentResult "Jose"] insideAllScopes :=
-  Split.append insideAllScopes [ConsentGiven "Jose", AssessmentResult "Jose"]
-    |>.comm
+    Split (insideAllScopes ++ screeningProduced) screeningProduced insideAllScopes :=
+  Split.append insideAllScopes screeningProduced |>.comm
 
 -- ── Branching helpers (same pattern as Clinical.lean JoseExample) ────────────
 
@@ -160,15 +146,12 @@ def insideAllScopesSel {extra : Ctx}
 
 /-- Shared disqualification arrow: produces NonQualifying from Patient. -/
 def nqArrow : Arrow insideAllScopes (insideAllScopes ++ [NonQualifying "Jose"]) :=
-  mkArrow "disqualify"
-    [Patient "Jose"]
-    [NonQualifying "Jose"]
+  Action.disqualify "Jose"
     (.bind (Patient.mk "Jose") (by elem_tac)
       .nil)
 
-/-- Context after consent + assessment (branch point for post-assessment NQ check). -/
-abbrev afterAssessment : Ctx :=
-  (insideAllScopes ++ [ConsentGiven "Jose"]) ++ [AssessmentResult "Jose"]
+/-- Context after the full screening pipeline (branch point for post-assessment NQ check). -/
+abbrev afterAssessment : Ctx := insideAllScopes ++ screeningProduced
 
 -- ══════════════════════════════════════════════════════════════════════════
 -- Phase 2: Drug administration (bounded × 3)
@@ -305,20 +288,51 @@ def checkupPhase : SheetDiagram roomState insideAllScopes roomState [insideAllSc
 
 /-- The inner pipeline: screening with NQ branching → drug doses → weekly checkups.
     Two branch points (consent refusal, post-assessment disqualification), one join.
-    On success, drug and checkup phases continue on the qualifying path. -/
+    On success: consent → heart → BP → VO₂ → products → assessment,
+    then drug and checkup phases continue on the qualifying path. -/
 def innerPipeline : SheetDiagram roomState insideAllScopes roomState
     [insideAllScopes ++ [NonQualifying "Jose"], insideAllScopes] :=
   .join
     (.branch (Split.idLeft insideAllScopes)
       insideAllScopesSel (Selection.id insideAllScopes)
       (.arrow nqArrow)
-      (.pipe screeningConsent
-        (.pipe screeningAssessment
-          (.branch (Split.idLeft afterAssessment)
-            insideAllScopesSel (Selection.id afterAssessment)
-            (.arrow nqArrow)
-            (.pipe (.drop dropScreeningResults)
-              (.seq drugPhase checkupPhase))))))
+      (.pipe (Action.consent "Jose" "Allen"
+          (.bind (Patient.mk "Jose") (by elem_tac)
+            (.bind allenJoseLangEvidence (by elem_tac)
+              .nil)))
+        (.pipe (Action.heartMeasurement "Jose" "Allen"
+            (.bind (Patient.mk "Jose") (by elem_tac)
+              (.bind (Clinician.mk "Allen") (by elem_tac)
+                (.bind ExamBed.mk (by elem_tac)
+                  (.bind allen_holds_exambed (by elem_tac)
+                    .nil)))))
+          (.pipe (Action.bpMeasurement "Jose" "Allen"
+              (.bind (Patient.mk "Jose") (by elem_tac)
+                (.bind (Clinician.mk "Allen") (by elem_tac)
+                  (.bind BPMonitor.mk (by elem_tac)
+                    (.bind allen_holds_bpmonitor (by elem_tac)
+                      .nil)))))
+            (.pipe (Action.vo2Measurement "Jose" "Allen"
+                (.bind (Patient.mk "Jose") (by elem_tac)
+                  (.bind (Clinician.mk "Allen") (by elem_tac)
+                    (.bind VO2Equipment.mk (by elem_tac)
+                      (.bind allen_holds_vo2equip (by elem_tac)
+                        .nil)))))
+              (.pipe (Action.products "Jose"
+                  (.bind (ConsentGiven.mk (Patient.mk "Jose") "") (by elem_tac)
+                    (.bind (HeartRate.heartRate (Patient.mk "Jose") 0) (by elem_tac)
+                      (.bind (BloodPressure.bloodPressure (Patient.mk "Jose") 0) (by elem_tac)
+                        (.bind (VO2Max.vO2Max (Patient.mk "Jose") 0) (by elem_tac)
+                          .nil)))))
+                (.pipe (Action.assessment "Jose"
+                    (.bind (Patient.mk "Jose") (by elem_tac)
+                      (.bind (ProductsOutput.products "" 0 0 0) (by elem_tac)
+                        .nil)))
+                  (.branch (Split.idLeft afterAssessment)
+                    insideAllScopesSel (Selection.id afterAssessment)
+                    (.arrow nqArrow)
+                    (.pipe (.drop dropScreeningResults)
+                      (.seq drugPhase checkupPhase))))))))))
 
 /-- The complete JoseTrial pipeline with all scope nesting:
     trial scope (OurTrial, declares clinicianSpeaksPatient)
